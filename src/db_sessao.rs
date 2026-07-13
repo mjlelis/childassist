@@ -31,10 +31,14 @@ impl DbSessao {
             [],
         ).map_err(|e| format!("Erro ao criar tabela de chat: {}", e))?;
 
+        // Forçamos a reestruturação para suportar Missões (Game Loop) descartando a tabela antiga (já que é só estado)
+        conn.execute("DROP TABLE IF EXISTS estado_jogo", []).ok();
         conn.execute(
-            "CREATE TABLE IF NOT EXISTS estado_jogo (
+            "CREATE TABLE estado_jogo (
                 id_crianca TEXT PRIMARY KEY,
-                palavra_desafio TEXT NOT NULL
+                palavra_desafio TEXT NOT NULL,
+                acertos INTEGER NOT NULL DEFAULT 0,
+                total INTEGER NOT NULL DEFAULT 3
             )",
             [],
         ).map_err(|e| format!("Erro ao criar tabela de estado: {}", e))?;
@@ -121,23 +125,36 @@ impl DbSessao {
         Ok(mensagens.join("\n"))
     }
 
-    pub fn definir_desafio(&self, id_crianca: &str, palavra: &str) -> Result<(), String> {
+    pub fn iniciar_missao(&self, id_crianca: &str, palavra: &str, total: i32) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO estado_jogo (id_crianca, palavra_desafio) VALUES (?1, ?2)
-             ON CONFLICT(id_crianca) DO UPDATE SET palavra_desafio=excluded.palavra_desafio",
-            rusqlite::params![id_crianca, palavra],
+            "INSERT INTO estado_jogo (id_crianca, palavra_desafio, acertos, total) VALUES (?1, ?2, 0, ?3)
+             ON CONFLICT(id_crianca) DO UPDATE SET palavra_desafio=excluded.palavra_desafio, acertos=0, total=excluded.total",
+            rusqlite::params![id_crianca, palavra, total],
         ).map_err(|e| e.to_string())?;
         Ok(())
     }
 
-    pub fn obter_desafio(&self, id_crianca: &str) -> Option<String> {
+    pub fn avancar_missao(&self, id_crianca: &str, nova_palavra: &str) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT palavra_desafio FROM estado_jogo WHERE id_crianca = ?1").ok()?;
+        conn.execute(
+            "UPDATE estado_jogo SET palavra_desafio = ?1, acertos = acertos + 1 WHERE id_crianca = ?2",
+            rusqlite::params![nova_palavra, id_crianca],
+        ).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn obter_estado_missao(&self, id_crianca: &str) -> Option<(String, i32, i32)> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT palavra_desafio, acertos, total FROM estado_jogo WHERE id_crianca = ?1").ok()?;
         let mut rows = stmt.query([id_crianca]).ok()?;
         
         if let Some(row) = rows.next().ok()? {
-            row.get(0).ok()
+            Some((
+                row.get(0).unwrap_or_default(),
+                row.get(1).unwrap_or(0),
+                row.get(2).unwrap_or(3),
+            ))
         } else {
             None
         }

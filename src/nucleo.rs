@@ -67,15 +67,22 @@ impl NucleoAlfabetizacao {
         }
 
         // 2. Classificação de Intenção (Híbrida: Regras Fixas + LLM)
-        let tem_desafio = !self.db.obter_desafio(&id_crianca).unwrap_or_default().is_empty();
+        let estado_missao = self.db.obter_estado_missao(&id_crianca);
+        let tem_desafio = estado_missao.is_some();
+        let txt_limpo = texto_digitado.trim().to_lowercase();
         
-        let intencao = if tem_desafio {
+        let intencao = if tem_desafio && !(txt_limpo == "2" || txt_limpo == "sair" || txt_limpo == "parar") {
             "TENTATIVA_SOLETRAÇÃO".to_string()
         } else {
-            let txt_limpo = texto_digitado.trim().to_lowercase();
+            if txt_limpo == "sair" || txt_limpo == "parar" {
+                let _ = self.db.limpar_desafio(&id_crianca);
+                return "Missão cancelada! Você quer tentar soletrar de novo (1) ou bater papo (2)?".to_string();
+            }
+
             if txt_limpo == "1" || txt_limpo.contains("soletrar") {
                 "QUER_SOLETRAR".to_string()
             } else if txt_limpo == "2" || txt_limpo.contains("bater papo") || txt_limpo.contains("conversar") {
+                let _ = self.db.limpar_desafio(&id_crianca); // Abandona a missão silenciosamente
                 "BATE_PAPO".to_string()
             } else {
                 self.classificar_intencao(&id_crianca, &texto_digitado)
@@ -120,7 +127,16 @@ impl NucleoAlfabetizacao {
     }
 
     fn fluxo_iniciar_soletracao(&self, id_crianca: &str) -> String {
-        let prompt_palavra = self.banco_prompts.montar_prompt("gerar_palavra_desafio", &[]);
+        let temas = ["um animal", "uma fruta", "uma cor", "um brinquedo", "uma comida", "uma roupa", "um objeto de casa"];
+        let indice = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as usize % temas.len();
+        
+        let prompt_palavra = self.banco_prompts.montar_prompt(
+            "gerar_palavra_desafio", 
+            &[
+                ("tema", temas[indice]),
+                ("palavra_anterior", "nenhuma")
+            ]
+        );
         let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, 0.9) {
             Ok(p) => p.trim().to_lowercase().chars().filter(|c| c.is_alphabetic()).collect::<String>(),
             Err(_) => String::new(),
@@ -130,25 +146,70 @@ impl NucleoAlfabetizacao {
             palavra_sorteada = self.corretor.sortear_palavra(); // Fallback seguro
         }
 
-        let _ = self.db.definir_desafio(id_crianca, &palavra_sorteada);
+        let _ = self.db.iniciar_missao(id_crianca, &palavra_sorteada, 3);
         
         // Em dispositivos IoT limitados, evitar uso de LLM para templates estritos economiza processamento e evita alucinações
-        format!("Oba! Vamos soletrar! Como se escreve a palavra '{}'?", palavra_sorteada)
+        format!("Missão iniciada! Vamos soletrar 3 palavras. Como se escreve a palavra '{}'?", palavra_sorteada)
     }
 
     fn fluxo_avaliar_soletracao(&self, id_crianca: &str, palavra_digitada: &str) -> String {
-        let palavra_esperada = self.db.obter_desafio(id_crianca).unwrap_or_default();
+        let estado = self.db.obter_estado_missao(id_crianca);
         
-        if palavra_esperada.is_empty() {
-            // Se caiu aqui sem estado, apenas joga pro bate-papo
+        if estado.is_none() {
             return self.fluxo_bate_papo(id_crianca, palavra_digitada);
         }
+        
+        let (palavra_esperada, acertos, total) = estado.unwrap();
         
         let acertou = self.corretor.verificar_desafio(palavra_digitada, &palavra_esperada);
         
         if acertou {
-            let _ = self.db.limpar_desafio(id_crianca);
-            "Muito bem! Você escreveu direitinho! Quer continuar soletrando ou quer bater papo?".to_string()
+            let novos_acertos = acertos + 1;
+            if novos_acertos < total {
+                // Sorteia próxima palavra com tema diferente
+                let temas = ["um animal", "uma fruta", "uma cor", "um brinquedo", "uma comida", "uma roupa", "um objeto de casa"];
+                let indice = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as usize % temas.len();
+                
+                let prompt_palavra = self.banco_prompts.montar_prompt(
+                    "gerar_palavra_desafio", 
+                    &[
+                        ("tema", temas[indice]),
+                        ("palavra_anterior", &palavra_esperada)
+                    ]
+                );
+                
+                let mut nova_palavra = match self.llama.inferir(&prompt_palavra, 0.9) {
+                    Ok(p) => p.trim().to_lowercase().chars().filter(|c| c.is_alphabetic()).collect::<String>(),
+                    Err(_) => String::new(),
+                };
+                if nova_palavra.is_empty() || nova_palavra.len() > 10 {
+                    nova_palavra = self.corretor.sortear_palavra();
+                }
+
+                let _ = self.db.avancar_missao(id_crianca, &nova_palavra);
+                
+                let prompt_progresso = self.banco_prompts.montar_prompt(
+                    "progresso_missao", 
+                    &[
+                        ("palavra_acertada", &palavra_esperada),
+                        ("acertos", &novos_acertos.to_string()),
+                        ("total", &total.to_string()),
+                        ("nova_palavra", &nova_palavra)
+                    ]
+                );
+                
+                self.llama.inferir(&prompt_progresso, self.banco_prompts.temperaturas.bate_papo)
+                    .unwrap_or_else(|_| format!("Muito bem! Você acertou {} de {}! Agora escreva '{}'.", novos_acertos, total, nova_palavra))
+            } else {
+                // Missão concluída!
+                let _ = self.db.limpar_desafio(id_crianca);
+                let prompt_conclusao = self.banco_prompts.montar_prompt(
+                    "conclusao_missao", &[("palavra_acertada", &palavra_esperada)]
+                );
+                
+                self.llama.inferir(&prompt_conclusao, self.banco_prompts.temperaturas.bate_papo)
+                    .unwrap_or_else(|_| "Uau! Você completou toda a missão! Parabéns! Digite 1 para nova missão, ou 2 para Bater Papo!".to_string())
+            }
         } else {
             let _ = self.db.salvar_erro(id_crianca, &palavra_esperada);
             
