@@ -73,9 +73,9 @@ impl NucleoAlfabetizacao {
             "TENTATIVA_SOLETRAÇÃO".to_string()
         } else {
             let txt_limpo = texto_digitado.trim().to_lowercase();
-            if txt_limpo == "1" || txt_limpo == "soletrar" {
+            if txt_limpo == "1" || txt_limpo.contains("soletrar") {
                 "QUER_SOLETRAR".to_string()
-            } else if txt_limpo == "2" {
+            } else if txt_limpo == "2" || txt_limpo.contains("bater papo") || txt_limpo.contains("conversar") {
                 "BATE_PAPO".to_string()
             } else {
                 self.classificar_intencao(&id_crianca, &texto_digitado)
@@ -120,7 +120,16 @@ impl NucleoAlfabetizacao {
     }
 
     fn fluxo_iniciar_soletracao(&self, id_crianca: &str) -> String {
-        let palavra_sorteada = self.corretor.sortear_palavra();
+        let prompt_palavra = self.banco_prompts.montar_prompt("gerar_palavra_desafio", &[]);
+        let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, 0.9) {
+            Ok(p) => p.trim().to_lowercase().chars().filter(|c| c.is_alphabetic()).collect::<String>(),
+            Err(_) => String::new(),
+        };
+        
+        if palavra_sorteada.is_empty() || palavra_sorteada.len() > 10 {
+            palavra_sorteada = self.corretor.sortear_palavra(); // Fallback seguro
+        }
+
         let _ = self.db.definir_desafio(id_crianca, &palavra_sorteada);
         
         // Em dispositivos IoT limitados, evitar uso de LLM para templates estritos economiza processamento e evita alucinações
