@@ -18,7 +18,18 @@ impl DbSessao {
                 tentativas INTEGER NOT NULL
             )",
             [],
-        ).map_err(|e| format!("Erro ao criar tabela: {}", e))?;
+        ).map_err(|e| format!("Erro ao criar tabela de erros: {}", e))?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS historico_chat (
+                id INTEGER PRIMARY KEY,
+                id_crianca TEXT NOT NULL,
+                remetente TEXT NOT NULL,
+                mensagem TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        ).map_err(|e| format!("Erro ao criar tabela de chat: {}", e))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -65,5 +76,40 @@ impl DbSessao {
             }
         }
         Ok(resultados)
+    }
+
+    pub fn salvar_mensagem(&self, id_crianca: &str, remetente: &str, mensagem: &str) -> Result<(), String> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO historico_chat (id_crianca, remetente, mensagem) VALUES (?1, ?2, ?3)",
+            rusqlite::params![id_crianca, remetente, mensagem],
+        ).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn obter_contexto(&self, id_crianca: &str, limite: i32) -> Result<String, String> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT remetente, mensagem FROM historico_chat 
+             WHERE id_crianca = ?1 
+             ORDER BY timestamp DESC LIMIT ?2"
+        ).map_err(|e| e.to_string())?;
+        
+        let iter = stmt.query_map(rusqlite::params![id_crianca, limite], |row| {
+            let remetente: String = row.get(0)?;
+            let mensagem: String = row.get(1)?;
+            Ok(format!("{}: {}", remetente, mensagem))
+        }).map_err(|e| e.to_string())?;
+        
+        let mut mensagens = Vec::new();
+        for item in iter {
+            if let Ok(msg) = item {
+                mensagens.push(msg);
+            }
+        }
+        
+        // Inverter para ficar na ordem cronológica (mais antiga primeiro)
+        mensagens.reverse();
+        Ok(mensagens.join("\n"))
     }
 }

@@ -16,6 +16,7 @@
   "fluxos": {
     "classificador_intencao": "Analise a fala da criança: '{fala_crianca}'. Responda estritamente com um JSON: {\"intencao\": \"SOLETRAÇÃO\" | \"BATE_PAPO\" | \"DESCONHECIDO\"}. Apenas o JSON, mais nada.",
     "corrigir_erro": "{persona}\nA criança tentou escrever uma palavra, mas errou. A palavra correta era: '{palavra_correta}', e ela escreveu: '{palavra_errada}'. Explique o erro gentilmente de forma lúdica.",
-    "bate_papo_livre": "{persona}\nA criança disse: '{fala_crianca}'. Responda de forma alegre e encorajadora."
+    "boas_vindas": "{persona}\nInicie a conversa com a criança de forma alegre e proativa. Faça uma pergunta para descobrir o que ela quer fazer hoje.",
+    "bate_papo_livre": "{persona}\n\nLembre-se do histórico da conversa:\n{contexto}\n\nA criança acaba de dizer: '{fala_crianca}'. Responda de forma curta e encorajadora, e no final, SEMPRE faça uma pergunta para continuar e evoluir o assunto."
   }
 }

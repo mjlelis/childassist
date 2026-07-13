@@ -44,7 +44,18 @@ impl NucleoAlfabetizacao {
         }))
     }
 
+    pub fn iniciar_interacao(&self, id_crianca: String) -> String {
+        let prompt = self.banco_prompts.montar_prompt("boas_vindas", &[]);
+        let resposta = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo)
+            .unwrap_or_else(|_| "Oi! Eu sou o seu tutor. O que vamos descobrir hoje?".to_string());
+        
+        let _ = self.db.salvar_mensagem(&id_crianca, "Brinquedo", &resposta);
+        resposta
+    }
+
     pub fn processar_entrada(&self, id_crianca: String, texto_digitado: String) -> String {
+        let _ = self.db.salvar_mensagem(&id_crianca, "Criança", &texto_digitado);
+
         // 1. Sanitização Segura
         match self.sanitizador.verificar(&texto_digitado) {
             StatusEntrada::Proibida => return "Oops! Essa palavra não é legal. Vamos falar sobre outra coisa?".to_string(),
@@ -56,11 +67,14 @@ impl NucleoAlfabetizacao {
         let intencao = self.classificar_intencao(&texto_digitado);
 
         // 3. Roteamento Seguro
-        match intencao.as_str() {
+        let resposta = match intencao.as_str() {
             "SOLETRAÇÃO" => self.fluxo_soletracao(&id_crianca, &texto_digitado),
-            "BATE_PAPO" => self.fluxo_bate_papo(&texto_digitado),
-            _ => self.fluxo_bate_papo(&texto_digitado), // Fallback caso o JSON do LLM venha sujo
-        }
+            "BATE_PAPO" => self.fluxo_bate_papo(&id_crianca, &texto_digitado),
+            _ => self.fluxo_bate_papo(&id_crianca, &texto_digitado), // Fallback caso o JSON do LLM venha sujo
+        };
+
+        let _ = self.db.salvar_mensagem(&id_crianca, "Brinquedo", &resposta);
+        resposta
     }
 }
 
@@ -107,10 +121,14 @@ impl NucleoAlfabetizacao {
         }
     }
     
-    fn fluxo_bate_papo(&self, texto: &str) -> String {
+    fn fluxo_bate_papo(&self, id_crianca: &str, texto: &str) -> String {
+        let contexto = self.db.obter_contexto(id_crianca, 4).unwrap_or_default();
         let prompt = self.banco_prompts.montar_prompt(
             "bate_papo_livre", 
-            &[("fala_crianca", texto)]
+            &[
+                ("contexto", &contexto),
+                ("fala_crianca", texto)
+            ]
         );
         
         // Conversa solta e criativa (temp 0.7)

@@ -26,7 +26,10 @@ fn main() {
         }
     };
 
-    println!("✅ Núcleo iniciado com sucesso! Digite 'sair' para encerrar.\n");
+    let id_crianca = "crianca_iot_1".to_string();
+
+    let saudacao = nucleo.iniciar_interacao(id_crianca.clone());
+    println!("🤖 Brinquedo: {}\n", saudacao);
 
     loop {
         print!("Criança: ");
@@ -45,8 +48,7 @@ fn main() {
             continue;
         }
 
-        // Simula o processamento do brinquedo e resposta em áudio (no caso, print)
-        let resposta = nucleo.processar_entrada("crianca_iot_1".to_string(), entrada.to_string());
+        let resposta = nucleo.processar_entrada(id_crianca.clone(), entrada.to_string());
         println!("🤖 Brinquedo: {}\n", resposta);
     }
 }
