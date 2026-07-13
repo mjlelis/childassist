@@ -5,7 +5,7 @@
   </p>
   <p>
     <img src="https://img.shields.io/badge/Language-Rust-orange.svg" alt="Rust" />
-    <img src="https://img.shields.io/badge/Platform-iOS%20%7C%20Android-blue.svg" alt="Platforms" />
+    <img src="https://img.shields.io/badge/Platform-iOS%20%7C%20Android%20%7C%20Raspberry%20Pi-blue.svg" alt="Platforms" />
     <img src="https://img.shields.io/badge/AI-Ollama%20%7C%20Llama.cpp-purple.svg" alt="AI" />
     <img src="https://img.shields.io/github/v/release/mjlelis/childassist" alt="Version" />
   </p>
@@ -15,7 +15,9 @@
 
 ## 📖 Sobre o Projeto
 
-O **ChildAssist** é um núcleo de alta performance construído nativamente em **Rust**. Ele foi projetado para atuar como o cérebro de inteligência artificial de aplicativos mobile focados na alfabetização de crianças, operando 100% offline (Edge AI) através de integração cruzada utilizando `uniffi` (Kotlin e Swift).
+O **ChildAssist** é um núcleo de alta performance construído nativamente em **Rust**. Ele foi projetado para atuar como o cérebro de inteligência artificial de aplicativos mobile e **sistemas embarcados (como brinquedos inteligentes rodando placas controladoras tipo Raspberry Pi)** focados na alfabetização infantil. 
+
+Por ser desenvolvido em Rust, ele opera de forma extremamente leve, rodando os LLMs 100% offline (Edge AI). No ecossistema mobile, ele interage de forma nativa utilizando `uniffi` (Kotlin e Swift). Quando embarcado em brinquedos e placas IoT, atua como um executável direto aproveitando ao máximo a memória limitadíssima do hardware.
 
 O sistema roteia interações, corrige soletrações de forma lúdica e mantém um bate-papo encorajador, blindado contra palavras inapropriadas e comportamentos de spam — tudo de forma local, preservando a privacidade das crianças.
 
