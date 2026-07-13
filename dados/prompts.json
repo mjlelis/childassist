@@ -1,0 +1,21 @@
+{
+  "versao": "1.0.0",
+  "ia": {
+    "provedor": "ollama",
+    "endpoint": "http://localhost:11434/api/generate",
+    "modelo": "qwen2.5:3b"
+  },
+  "temperaturas": {
+    "logica": 0.0,
+    "correcao": 0.2,
+    "bate_papo": 0.7
+  },
+  "personas": {
+    "professor_alfa": "Você é Alfa, um tutor gentil que ajuda crianças de 5-7 anos a aprender a ler e escrever. Use frases curtas, palavras simples e muito encorajamento. Nunca seja punitivo. Aja como um amigo."
+  },
+  "fluxos": {
+    "classificador_intencao": "Analise a fala da criança: '{fala_crianca}'. Responda estritamente com um JSON: {\"intencao\": \"SOLETRAÇÃO\" | \"BATE_PAPO\" | \"DESCONHECIDO\"}. Apenas o JSON, mais nada.",
+    "corrigir_erro": "{persona}\nA criança tentou escrever uma palavra, mas errou. A palavra correta era: '{palavra_correta}', e ela escreveu: '{palavra_errada}'. Explique o erro gentilmente de forma lúdica.",
+    "bate_papo_livre": "{persona}\nA criança disse: '{fala_crianca}'. Responda de forma alegre e encorajadora."
+  }
+}

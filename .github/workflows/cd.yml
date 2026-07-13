@@ -1,0 +1,38 @@
+name: CD - Release Build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Release Binaries
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        
+    - name: Build Release
+      run: cargo build --release
+      
+    - name: Generate Uniffi Bindings (Placeholder)
+      run: |
+        echo "Gerando bindings para iOS/Android em etapas futuras"
+        # cargo run --bin uniffi-bindgen generate --library target/release/libprojeto_alfabetizacao_rust.so --language swift --out-dir out/
+        
+    - name: Archive artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: rust-release-binaries
+        path: target/release/
