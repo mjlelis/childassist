@@ -68,18 +68,25 @@ impl NucleoAlfabetizacao {
 
         // 2. Classificação de Intenção (Híbrida: Regras Fixas + LLM)
         let estado_missao = self.db.obter_estado_missao(&id_crianca);
-        let tem_desafio = estado_missao.is_some();
-        let txt_limpo = texto_digitado.trim().to_lowercase();
         
-        let intencao = if tem_desafio && !(txt_limpo == "2" || txt_limpo == "sair" || txt_limpo == "parar") {
-            "TENTATIVA_SOLETRAÇÃO".to_string()
-        } else {
+        let intencao = if let Some((fase, _tema, _palavra, _acertos, _total)) = estado_missao {
+            let txt_limpo = texto_digitado.trim().to_lowercase();
             if txt_limpo == "sair" || txt_limpo == "parar" {
                 let _ = self.db.limpar_desafio(&id_crianca);
                 return "Missão cancelada! Você quer tentar soletrar de novo (1) ou bater papo (2)?".to_string();
             }
 
-            if txt_limpo == "1" || txt_limpo.contains("soletrar") {
+            if fase == "ESCOLHENDO_TEMA" {
+                "ESCOLHENDO_TEMA".to_string()
+            } else if fase == "JOGANDO" {
+                "TENTATIVA_SOLETRAÇÃO".to_string()
+            } else {
+                "BATE_PAPO".to_string()
+            }
+        } else {
+            let txt_limpo = texto_digitado.trim().to_lowercase();
+            if txt_limpo == "1" || txt_limpo.contains("soletrar") || txt_limpo == "sim" {
+                // 'sim' fora de missão vai direto pro jogo, cortando o loop de repetição cega da IA.
                 "QUER_SOLETRAR".to_string()
             } else if txt_limpo == "2" || txt_limpo.contains("bater papo") || txt_limpo.contains("conversar") {
                 let _ = self.db.limpar_desafio(&id_crianca); // Abandona a missão silenciosamente
@@ -91,7 +98,8 @@ impl NucleoAlfabetizacao {
 
         // 3. Roteamento Seguro com Máquina de Estados
         let resposta = match intencao.as_str() {
-            "QUER_SOLETRAR" => self.fluxo_iniciar_soletracao(&id_crianca),
+            "QUER_SOLETRAR" => self.fluxo_iniciar_escolha_tema(&id_crianca),
+            "ESCOLHENDO_TEMA" => self.fluxo_iniciar_soletracao(&id_crianca, &texto_digitado),
             "TENTATIVA_SOLETRAÇÃO" => self.fluxo_avaliar_soletracao(&id_crianca, &texto_digitado),
             "BATE_PAPO" => self.fluxo_bate_papo(&id_crianca, &texto_digitado),
             _ => self.fluxo_bate_papo(&id_crianca, &texto_digitado),
@@ -126,14 +134,20 @@ impl NucleoAlfabetizacao {
         }
     }
 
-    fn fluxo_iniciar_soletracao(&self, id_crianca: &str) -> String {
-        let temas = ["um animal", "uma fruta", "uma cor", "um brinquedo", "uma comida", "uma roupa", "um objeto de casa"];
-        let indice = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as usize % temas.len();
+    fn fluxo_iniciar_escolha_tema(&self, id_crianca: &str) -> String {
+        let _ = self.db.iniciar_escolha_tema(id_crianca);
+        let prompt = self.banco_prompts.montar_prompt("sugerir_temas", &[]);
+        self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo)
+            .unwrap_or_else(|_| "Legal! Você quer uma missão com palavras de Animais, Frutas ou Brinquedos? Escolha um!".to_string())
+    }
+
+    fn fluxo_iniciar_soletracao(&self, id_crianca: &str, tema_digitado: &str) -> String {
+        let tema = if tema_digitado.trim().is_empty() { "geral" } else { tema_digitado.trim() };
         
         let prompt_palavra = self.banco_prompts.montar_prompt(
             "gerar_palavra_desafio", 
             &[
-                ("tema", temas[indice]),
+                ("tema", tema),
                 ("palavra_anterior", "nenhuma")
             ]
         );
@@ -146,10 +160,10 @@ impl NucleoAlfabetizacao {
             palavra_sorteada = self.corretor.sortear_palavra(); // Fallback seguro
         }
 
-        let _ = self.db.iniciar_missao(id_crianca, &palavra_sorteada, 3);
+        let _ = self.db.iniciar_missao(id_crianca, tema, &palavra_sorteada, 3);
         
         // Em dispositivos IoT limitados, evitar uso de LLM para templates estritos economiza processamento e evita alucinações
-        format!("Missão iniciada! Vamos soletrar 3 palavras. Como se escreve a palavra '{}'?", palavra_sorteada)
+        format!("Missão do tema '{}' iniciada! Vamos soletrar 3 palavras. Como se escreve a palavra '{}'?", tema, palavra_sorteada)
     }
 
     fn fluxo_avaliar_soletracao(&self, id_crianca: &str, palavra_digitada: &str) -> String {
@@ -159,21 +173,18 @@ impl NucleoAlfabetizacao {
             return self.fluxo_bate_papo(id_crianca, palavra_digitada);
         }
         
-        let (palavra_esperada, acertos, total) = estado.unwrap();
+        let (_fase, tema, palavra_esperada, acertos, total) = estado.unwrap();
         
         let acertou = self.corretor.verificar_desafio(palavra_digitada, &palavra_esperada);
         
         if acertou {
             let novos_acertos = acertos + 1;
             if novos_acertos < total {
-                // Sorteia próxima palavra com tema diferente
-                let temas = ["um animal", "uma fruta", "uma cor", "um brinquedo", "uma comida", "uma roupa", "um objeto de casa"];
-                let indice = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as usize % temas.len();
-                
+                // Sorteia próxima palavra usando o mesmo tema da missão
                 let prompt_palavra = self.banco_prompts.montar_prompt(
                     "gerar_palavra_desafio", 
                     &[
-                        ("tema", temas[indice]),
+                        ("tema", &tema),
                         ("palavra_anterior", &palavra_esperada)
                     ]
                 );

@@ -36,7 +36,9 @@ impl DbSessao {
         conn.execute(
             "CREATE TABLE estado_jogo (
                 id_crianca TEXT PRIMARY KEY,
-                palavra_desafio TEXT NOT NULL,
+                fase TEXT NOT NULL,
+                tema TEXT,
+                palavra_desafio TEXT,
                 acertos INTEGER NOT NULL DEFAULT 0,
                 total INTEGER NOT NULL DEFAULT 3
             )",
@@ -125,12 +127,22 @@ impl DbSessao {
         Ok(mensagens.join("\n"))
     }
 
-    pub fn iniciar_missao(&self, id_crianca: &str, palavra: &str, total: i32) -> Result<(), String> {
+    pub fn iniciar_escolha_tema(&self, id_crianca: &str) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO estado_jogo (id_crianca, palavra_desafio, acertos, total) VALUES (?1, ?2, 0, ?3)
-             ON CONFLICT(id_crianca) DO UPDATE SET palavra_desafio=excluded.palavra_desafio, acertos=0, total=excluded.total",
-            rusqlite::params![id_crianca, palavra, total],
+            "INSERT INTO estado_jogo (id_crianca, fase, tema, palavra_desafio, acertos, total) VALUES (?1, 'ESCOLHENDO_TEMA', NULL, NULL, 0, 3)
+             ON CONFLICT(id_crianca) DO UPDATE SET fase='ESCOLHENDO_TEMA', tema=NULL, palavra_desafio=NULL, acertos=0, total=3",
+            rusqlite::params![id_crianca],
+        ).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn iniciar_missao(&self, id_crianca: &str, tema: &str, palavra: &str, total: i32) -> Result<(), String> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO estado_jogo (id_crianca, fase, tema, palavra_desafio, acertos, total) VALUES (?1, 'JOGANDO', ?2, ?3, 0, ?4)
+             ON CONFLICT(id_crianca) DO UPDATE SET fase='JOGANDO', tema=excluded.tema, palavra_desafio=excluded.palavra_desafio, acertos=0, total=excluded.total",
+            rusqlite::params![id_crianca, tema, palavra, total],
         ).map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -144,16 +156,19 @@ impl DbSessao {
         Ok(())
     }
 
-    pub fn obter_estado_missao(&self, id_crianca: &str) -> Option<(String, i32, i32)> {
+    // Retorna: Option<(fase, tema, palavra, acertos, total)>
+    pub fn obter_estado_missao(&self, id_crianca: &str) -> Option<(String, String, String, i32, i32)> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT palavra_desafio, acertos, total FROM estado_jogo WHERE id_crianca = ?1").ok()?;
+        let mut stmt = conn.prepare("SELECT fase, tema, palavra_desafio, acertos, total FROM estado_jogo WHERE id_crianca = ?1").ok()?;
         let mut rows = stmt.query([id_crianca]).ok()?;
         
         if let Some(row) = rows.next().ok()? {
             Some((
                 row.get(0).unwrap_or_default(),
-                row.get(1).unwrap_or(0),
-                row.get(2).unwrap_or(3),
+                row.get(1).unwrap_or_default(),
+                row.get(2).unwrap_or_default(),
+                row.get(3).unwrap_or(0),
+                row.get(4).unwrap_or(3),
             ))
         } else {
             None
