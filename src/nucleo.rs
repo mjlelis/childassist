@@ -63,8 +63,21 @@ impl NucleoAlfabetizacao {
             StatusEntrada::Valida => {}
         }
 
-        // 2. Classificação de Intenção com Temperatura 0.0
-        let intencao = self.classificar_intencao(&id_crianca, &texto_digitado);
+        // 2. Classificação de Intenção (Híbrida: Regras Fixas + LLM)
+        let tem_desafio = !self.db.obter_desafio(&id_crianca).unwrap_or_default().is_empty();
+        
+        let intencao = if tem_desafio {
+            "TENTATIVA_SOLETRAÇÃO".to_string()
+        } else {
+            let txt_limpo = texto_digitado.trim().to_lowercase();
+            if txt_limpo == "1" || txt_limpo == "soletrar" {
+                "QUER_SOLETRAR".to_string()
+            } else if txt_limpo == "2" {
+                "BATE_PAPO".to_string()
+            } else {
+                self.classificar_intencao(&id_crianca, &texto_digitado)
+            }
+        };
 
         // 3. Roteamento Seguro com Máquina de Estados
         let resposta = match intencao.as_str() {
