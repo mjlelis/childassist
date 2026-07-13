@@ -127,12 +127,12 @@ impl DbSessao {
         Ok(mensagens.join("\n"))
     }
 
-    pub fn iniciar_escolha_tema(&self, id_crianca: &str) -> Result<(), String> {
+    pub fn iniciar_escolha_tema(&self, id_crianca: &str, opcoes_tema: &str) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO estado_jogo (id_crianca, fase, tema, palavra_desafio, acertos, total) VALUES (?1, 'ESCOLHENDO_TEMA', NULL, NULL, 0, 3)
-             ON CONFLICT(id_crianca) DO UPDATE SET fase='ESCOLHENDO_TEMA', tema=NULL, palavra_desafio=NULL, acertos=0, total=3",
-            rusqlite::params![id_crianca],
+            "INSERT INTO estado_jogo (id_crianca, fase, tema, palavra_desafio, acertos, total) VALUES (?1, 'ESCOLHENDO_TEMA', ?2, NULL, 0, 3)
+             ON CONFLICT(id_crianca) DO UPDATE SET fase='ESCOLHENDO_TEMA', tema=excluded.tema, palavra_desafio=NULL, acertos=0, total=3",
+            rusqlite::params![id_crianca, opcoes_tema],
         ).map_err(|e| e.to_string())?;
         Ok(())
     }

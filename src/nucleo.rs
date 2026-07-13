@@ -135,19 +135,46 @@ impl NucleoAlfabetizacao {
     }
 
     fn fluxo_iniciar_escolha_tema(&self, id_crianca: &str) -> String {
-        let _ = self.db.iniciar_escolha_tema(id_crianca);
         let prompt = self.banco_prompts.montar_prompt("sugerir_temas", &[]);
-        self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo)
-            .unwrap_or_else(|_| "Legal! Você quer uma missão com palavras de Animais, Frutas ou Brinquedos? Escolha um!".to_string())
+        let json_resposta = self.llama.inferir(&prompt, 0.7)
+            .unwrap_or_else(|_| "[\"Animais\", \"Frutas\", \"Cores\"]".to_string());
+            
+        // Extrai temas do JSON de forma rústica para Edge IoT
+        let clean = json_resposta.replace("[", "").replace("]", "").replace("\"", "");
+        let temas_array: Vec<&str> = clean.split(',').map(|s| s.trim()).collect();
+        
+        let t1 = temas_array.get(0).unwrap_or(&"Animais");
+        let t2 = temas_array.get(1).unwrap_or(&"Frutas");
+        let t3 = temas_array.get(2).unwrap_or(&"Cores");
+        
+        // Inicia a fase salvando as 3 opções no banco (separadas por vírgula)
+        let string_temas = format!("{},{},{}", t1, t2, t3);
+        let _ = self.db.iniciar_escolha_tema(id_crianca, &string_temas);
+        
+        format!("Legal! Escolha um tema pelo número:\n1 - {}\n2 - {}\n3 - {}", t1, t2, t3)
     }
 
-    fn fluxo_iniciar_soletracao(&self, id_crianca: &str, tema_digitado: &str) -> String {
-        let tema = if tema_digitado.trim().is_empty() { "geral" } else { tema_digitado.trim() };
+    fn fluxo_iniciar_soletracao(&self, id_crianca: &str, texto_digitado: &str) -> String {
+        // Recupera as opções que foram salvas no banco
+        let estado = self.db.obter_estado_missao(id_crianca);
+        let mut tema_escolhido = "Geral".to_string();
+        
+        if let Some((_fase, tema_salvo, _palavra, _acertos, _total)) = estado {
+            let txt_limpo = texto_digitado.trim();
+            let opcoes: Vec<&str> = tema_salvo.split(',').collect();
+            
+            tema_escolhido = match txt_limpo {
+                "1" => opcoes.get(0).unwrap_or(&"Geral").to_string(),
+                "2" => opcoes.get(1).unwrap_or(&"Geral").to_string(),
+                "3" => opcoes.get(2).unwrap_or(&"Geral").to_string(),
+                _ => txt_limpo.to_string(), // Se a criança digitou o nome inteiro
+            };
+        }
         
         let prompt_palavra = self.banco_prompts.montar_prompt(
             "gerar_palavra_desafio", 
             &[
-                ("tema", tema),
+                ("tema", &tema_escolhido),
                 ("palavra_anterior", "nenhuma")
             ]
         );
@@ -160,10 +187,10 @@ impl NucleoAlfabetizacao {
             palavra_sorteada = self.corretor.sortear_palavra(); // Fallback seguro
         }
 
-        let _ = self.db.iniciar_missao(id_crianca, tema, &palavra_sorteada, 3);
+        let _ = self.db.iniciar_missao(id_crianca, &tema_escolhido, &palavra_sorteada, 3);
         
         // Em dispositivos IoT limitados, evitar uso de LLM para templates estritos economiza processamento e evita alucinações
-        format!("Missão do tema '{}' iniciada! Vamos soletrar 3 palavras. Como se escreve a palavra '{}'?", tema, palavra_sorteada)
+        format!("Missão de '{}' iniciada! Vamos soletrar 3 palavras. Como se escreve a palavra '{}'?", tema_escolhido, palavra_sorteada)
     }
 
     fn fluxo_avaliar_soletracao(&self, id_crianca: &str, palavra_digitada: &str) -> String {

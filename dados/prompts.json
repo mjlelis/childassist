@@ -3,7 +3,7 @@
   "ia": {
     "provedor": "ollama",
     "endpoint": "http://localhost:11434/api/generate",
-    "modelo": "qwen2.5:3b"
+    "modelo": "qwen2:7b"
   },
   "temperaturas": {
     "logica": 0.0,
@@ -20,8 +20,8 @@
     "boas_vindas": "Seja EXTREMAMENTE breve (máximo 2 frases curtas) e fale em português perfeito (diga 'Vamos brincar?' e NUNCA 'Queremos jogar?'). Diga: 'Olá! Sou o Alfa, seu amigo! Vamos brincar? Digite 1 para Soletrar, ou 2 para Bater Papo.' (você pode variar um pouco a alegria, mas mantenha essa estrutura exata de números 1 e 2).",
     "bate_papo_livre": "{persona}\n\nHistórico:\n{contexto}\n\nA criança acaba de dizer: '{fala_crianca}'. Escreva a sua resposta. IMPORTANTE: Escreva APENAS a sua fala. Não escreva 'Criança:' e não continue o diálogo por ela. Termine fazendo APENAS UMA pergunta simples para manter o papo natural.",
     "gerar_palavra_desafio": "Você é Alfa. Sugira UMA única palavra simples do dia a dia (de 3 a 6 letras, sem acentos) relacionada ao tema: '{tema}'. A palavra NUNCA pode ser '{palavra_anterior}'. Responda APENAS com a nova palavra em letras minúsculas e mais nada.",
-    "sugerir_temas": "{persona}\nSugira 3 temas muito simples para um jogo de soletrar (ex: Animais, Cores, Frutas, Comidas). Liste-os. Termine perguntando qual tema a criança escolhe. Seja muito breve.",
-    "progresso_missao": "{persona}\nA criança acaba de acertar a palavra '{palavra_acertada}'! Ela completou {acertos} de {total} desafios da missão de soletração. A próxima palavra sorteada é '{nova_palavra}'. Crie uma fala muito curta celebrando o acerto, elogiando o avanço na missão, e já lançando o desafio da próxima palavra ('Como se escreve {nova_palavra}?').",
+    "sugerir_temas": "Sugira 3 temas simples para um jogo de soletrar (ex: Animais, Cores). Responda APENAS com um array JSON estrito no formato: [\"Tema 1\", \"Tema 2\", \"Tema 3\"]. Não escreva mais nada.",
+    "progresso_missao": "{persona}\nA criança acaba de acertar a palavra '{palavra_acertada}'! Ela completou {acertos} de {total} desafios da missão. A próxima palavra sorteada é '{nova_palavra}'. Crie uma fala muito curta em português do Brasil celebrando o acerto e lançando o próximo desafio. NUNCA USE INGLÊS (como 'next word'). Use EXATAMENTE a estrutura final: 'Como se escreve {nova_palavra}?'.",
     "conclusao_missao": "{persona}\nA criança acaba de acertar a última palavra '{palavra_acertada}' e CONCLUIU a missão de soletração (ganhou)! Faça uma festa textual muito alegre e curta parabenizando a vitória da criança! Pergunte se ela quer bater papo ou fazer outra missão de soletração."
   }
 }
