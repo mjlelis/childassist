@@ -187,7 +187,12 @@ impl NucleoAlfabetizacao {
             ]
         );
         let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, 0.9) {
-            Ok(p) => p.trim().to_lowercase().chars().filter(|c| c.is_alphabetic()).collect::<String>(),
+            Ok(p) => {
+                let limpo = p.trim().to_lowercase();
+                let partes: Vec<&str> = limpo.split_whitespace().collect();
+                let ultima = partes.last().unwrap_or(&"").to_string();
+                ultima.chars().filter(|c| c.is_alphabetic()).collect::<String>()
+            },
             Err(_) => String::new(),
         };
         
@@ -225,7 +230,12 @@ impl NucleoAlfabetizacao {
                 );
                 
                 let mut nova_palavra = match self.llama.inferir(&prompt_palavra, 0.9) {
-                    Ok(p) => p.trim().to_lowercase().chars().filter(|c| c.is_alphabetic()).collect::<String>(),
+                    Ok(p) => {
+                        let limpo = p.trim().to_lowercase();
+                        let partes: Vec<&str> = limpo.split_whitespace().collect();
+                        let ultima = partes.last().unwrap_or(&"").to_string();
+                        ultima.chars().filter(|c| c.is_alphabetic()).collect::<String>()
+                    },
                     Err(_) => String::new(),
                 };
                 if nova_palavra.is_empty() || nova_palavra.len() > 10 {
