@@ -31,6 +31,14 @@ impl DbSessao {
             [],
         ).map_err(|e| format!("Erro ao criar tabela de chat: {}", e))?;
 
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS estado_jogo (
+                id_crianca TEXT PRIMARY KEY,
+                palavra_desafio TEXT NOT NULL
+            )",
+            [],
+        ).map_err(|e| format!("Erro ao criar tabela de estado: {}", e))?;
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -111,5 +119,36 @@ impl DbSessao {
         // Inverter para ficar na ordem cronológica (mais antiga primeiro)
         mensagens.reverse();
         Ok(mensagens.join("\n"))
+    }
+
+    pub fn definir_desafio(&self, id_crianca: &str, palavra: &str) -> Result<(), String> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO estado_jogo (id_crianca, palavra_desafio) VALUES (?1, ?2)
+             ON CONFLICT(id_crianca) DO UPDATE SET palavra_desafio=excluded.palavra_desafio",
+            rusqlite::params![id_crianca, palavra],
+        ).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn obter_desafio(&self, id_crianca: &str) -> Option<String> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT palavra_desafio FROM estado_jogo WHERE id_crianca = ?1").ok()?;
+        let mut rows = stmt.query([id_crianca]).ok()?;
+        
+        if let Some(row) = rows.next().ok()? {
+            row.get(0).ok()
+        } else {
+            None
+        }
+    }
+
+    pub fn limpar_desafio(&self, id_crianca: &str) -> Result<(), String> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM estado_jogo WHERE id_crianca = ?1",
+            rusqlite::params![id_crianca],
+        ).map_err(|e| e.to_string())?;
+        Ok(())
     }
 }

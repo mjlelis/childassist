@@ -66,11 +66,12 @@ impl NucleoAlfabetizacao {
         // 2. Classificação de Intenção com Temperatura 0.0
         let intencao = self.classificar_intencao(&id_crianca, &texto_digitado);
 
-        // 3. Roteamento Seguro
+        // 3. Roteamento Seguro com Máquina de Estados
         let resposta = match intencao.as_str() {
-            "SOLETRAÇÃO" => self.fluxo_soletracao(&id_crianca, &texto_digitado),
+            "QUER_SOLETRAR" => self.fluxo_iniciar_soletracao(&id_crianca),
+            "TENTATIVA_SOLETRAÇÃO" => self.fluxo_avaliar_soletracao(&id_crianca, &texto_digitado),
             "BATE_PAPO" => self.fluxo_bate_papo(&id_crianca, &texto_digitado),
-            _ => self.fluxo_bate_papo(&id_crianca, &texto_digitado), // Fallback caso o JSON do LLM venha sujo
+            _ => self.fluxo_bate_papo(&id_crianca, &texto_digitado),
         };
 
         let _ = self.db.salvar_mensagem(&id_crianca, "Brinquedo", &resposta);
@@ -102,20 +103,39 @@ impl NucleoAlfabetizacao {
         }
     }
 
-    fn fluxo_soletracao(&self, id_crianca: &str, palavra_digitada: &str) -> String {
-        let (acertou, palavra_correta) = self.corretor.verificar_soletracao(palavra_digitada);
+    fn fluxo_iniciar_soletracao(&self, id_crianca: &str) -> String {
+        let palavra_sorteada = self.corretor.sortear_palavra();
+        let _ = self.db.definir_desafio(id_crianca, &palavra_sorteada);
+        
+        let prompt = self.banco_prompts.montar_prompt(
+            "lancar_desafio", 
+            &[("palavra_desafio", &palavra_sorteada)]
+        );
+        
+        self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo)
+            .unwrap_or_else(|_| format!("Oba! Vamos soletrar! Como se escreve '{}'?", palavra_sorteada))
+    }
+
+    fn fluxo_avaliar_soletracao(&self, id_crianca: &str, palavra_digitada: &str) -> String {
+        let palavra_esperada = self.db.obter_desafio(id_crianca).unwrap_or_default();
+        
+        if palavra_esperada.is_empty() {
+            // Se caiu aqui sem estado, apenas joga pro bate-papo
+            return self.fluxo_bate_papo(id_crianca, palavra_digitada);
+        }
+        
+        let acertou = self.corretor.verificar_desafio(palavra_digitada, &palavra_esperada);
         
         if acertou {
-            "Muito bem! Você escreveu direitinho!".to_string()
+            let _ = self.db.limpar_desafio(id_crianca);
+            "Muito bem! Você escreveu direitinho! Quer continuar soletrando ou quer bater papo?".to_string()
         } else {
-            // Persistir falha no banco SQLite local
-            let _ = self.db.salvar_erro(id_crianca, &palavra_correta); // Ignora erros de log sem panic!
+            let _ = self.db.salvar_erro(id_crianca, &palavra_esperada);
             
-            // Corrige com persona e pedagogia do LLM (temp 0.2)
             let prompt = self.banco_prompts.montar_prompt(
                 "corrigir_erro", 
                 &[
-                    ("palavra_correta", &palavra_correta),
+                    ("palavra_correta", &palavra_esperada),
                     ("palavra_errada", palavra_digitada)
                 ]
             );
