@@ -18,11 +18,27 @@ impl CorretorMock {
         let palavra_lower = palavra.to_lowercase();
         
         if self.dicionario.contains(&palavra_lower) {
-            (true, palavra_lower)
+            return (true, palavra_lower);
+        }
+        
+        let primeira_letra = palavra_lower.chars().next().unwrap_or(' ');
+        let mut sugestao = None;
+        
+        for palavra_dic in &self.dicionario {
+            if palavra_dic.starts_with(primeira_letra) {
+                let diff = (palavra_dic.len() as isize - palavra_lower.len() as isize).abs();
+                if diff <= 2 {
+                    sugestao = Some(palavra_dic.clone());
+                    break;
+                }
+            }
+        }
+        
+        if let Some(s) = sugestao {
+            (false, s)
         } else {
-            // Mock de correção (retorna a primeira palavra do dicionário apenas como exemplo)
-            let sugestao = self.dicionario.first().cloned().unwrap_or_else(|| "gato".to_string());
-            (false, sugestao)
+            // Assume que é um nome próprio se não houver nada remotamente parecido
+            (true, palavra_lower)
         }
     }
 }
