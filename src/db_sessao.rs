@@ -34,10 +34,11 @@ impl DbSessao {
         // Forçamos a reestruturação para suportar Missões (Game Loop) descartando a tabela antiga (já que é só estado)
         conn.execute("DROP TABLE IF EXISTS estado_jogo", []).ok();
         conn.execute(
-            "CREATE TABLE estado_jogo (
+            "CREATE TABLE IF NOT EXISTS estado_jogo (
                 id_crianca TEXT PRIMARY KEY,
                 fase TEXT NOT NULL,
                 tema TEXT,
+                opcoes_tema TEXT,
                 palavra_desafio TEXT,
                 acertos INTEGER NOT NULL DEFAULT 0,
                 total INTEGER NOT NULL DEFAULT 3
@@ -130,8 +131,8 @@ impl DbSessao {
     pub fn iniciar_escolha_tema(&self, id_crianca: &str, opcoes_tema: &str) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO estado_jogo (id_crianca, fase, tema, palavra_desafio, acertos, total) VALUES (?1, 'ESCOLHENDO_TEMA', ?2, NULL, 0, 3)
-             ON CONFLICT(id_crianca) DO UPDATE SET fase='ESCOLHENDO_TEMA', tema=excluded.tema, palavra_desafio=NULL, acertos=0, total=3",
+            "INSERT INTO estado_jogo (id_crianca, fase, tema, opcoes_tema, palavra_desafio, acertos, total) VALUES (?1, 'ESCOLHENDO_TEMA', NULL, ?2, NULL, 0, 3)
+             ON CONFLICT(id_crianca) DO UPDATE SET fase='ESCOLHENDO_TEMA', tema=NULL, opcoes_tema=excluded.opcoes_tema, palavra_desafio=NULL, acertos=0, total=3",
             rusqlite::params![id_crianca, opcoes_tema],
         ).map_err(|e| e.to_string())?;
         Ok(())
@@ -139,10 +140,10 @@ impl DbSessao {
 
     pub fn iniciar_missao(&self, id_crianca: &str, tema: &str, palavra: &str, total: i32) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
+        // Não apagamos opcoes_tema, pois ele será usado na próxima fase!
         conn.execute(
-            "INSERT INTO estado_jogo (id_crianca, fase, tema, palavra_desafio, acertos, total) VALUES (?1, 'JOGANDO', ?2, ?3, 0, ?4)
-             ON CONFLICT(id_crianca) DO UPDATE SET fase='JOGANDO', tema=excluded.tema, palavra_desafio=excluded.palavra_desafio, acertos=0, total=excluded.total",
-            rusqlite::params![id_crianca, tema, palavra, total],
+            "UPDATE estado_jogo SET fase='JOGANDO', tema=?1, palavra_desafio=?2, acertos=0, total=?3 WHERE id_crianca=?4",
+            rusqlite::params![tema, palavra, total, id_crianca],
         ).map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -156,20 +157,20 @@ impl DbSessao {
         Ok(())
     }
 
-    // Retorna: Option<(fase, tema, palavra, acertos, total)>
-    pub fn obter_estado_missao(&self, id_crianca: &str) -> Option<(String, String, String, i32, i32)> {
+    // Retorna: Option<(fase, tema, opcoes_tema, palavra, acertos, total)>
+    pub fn obter_estado_missao(&self, id_crianca: &str) -> Option<(String, String, String, String, i32, i32)> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT fase, tema, palavra_desafio, acertos, total FROM estado_jogo WHERE id_crianca = ?1").ok()?;
-        let mut rows = stmt.query([id_crianca]).ok()?;
+        let mut stmt = conn.prepare("SELECT fase, tema, opcoes_tema, palavra_desafio, acertos, total FROM estado_jogo WHERE id_crianca = ?1").ok()?;
+        let mut rows = stmt.query(rusqlite::params![id_crianca]).ok()?;
         
-        if let Some(row) = rows.next().ok()? {
-            Some((
-                row.get(0).unwrap_or_default(),
-                row.get(1).unwrap_or_default(),
-                row.get(2).unwrap_or_default(),
-                row.get(3).unwrap_or(0),
-                row.get(4).unwrap_or(3),
-            ))
+        if let Some(row) = rows.next().ok().flatten() {
+            let fase: String = row.get(0).unwrap_or_default();
+            let tema: String = row.get(1).unwrap_or_default();
+            let opcoes_tema: String = row.get(2).unwrap_or_default();
+            let palavra: String = row.get(3).unwrap_or_default();
+            let acertos: i32 = row.get(4).unwrap_or(0);
+            let total: i32 = row.get(5).unwrap_or(3);
+            Some((fase, tema, opcoes_tema, palavra, acertos, total))
         } else {
             None
         }

@@ -69,7 +69,7 @@ impl NucleoAlfabetizacao {
         // 2. Classificação de Intenção (Híbrida: Regras Fixas + LLM)
         let estado_missao = self.db.obter_estado_missao(&id_crianca);
         
-        let intencao = if let Some((fase, _tema, _palavra, _acertos, _total)) = estado_missao {
+        let intencao = if let Some((fase, _tema, opcoes, _palavra, _acertos, _total)) = estado_missao {
             let txt_limpo = texto_digitado.trim().to_lowercase();
             if txt_limpo == "sair" || txt_limpo == "parar" {
                 let _ = self.db.limpar_desafio(&id_crianca);
@@ -77,6 +77,14 @@ impl NucleoAlfabetizacao {
             }
 
             if fase == "ESCOLHENDO_TEMA" {
+                let num_opcoes = opcoes.split(',').count();
+                if txt_limpo == "3" && num_opcoes == 2 {
+                    let _ = self.db.limpar_desafio(&id_crianca);
+                    return "Legal! Vamos bater papo! Sobre o que você quer falar?".to_string();
+                } else if txt_limpo.contains("bater papo") {
+                    let _ = self.db.limpar_desafio(&id_crianca);
+                    return "Legal! Vamos bater papo! Sobre o que você quer falar?".to_string();
+                }
                 "ESCOLHENDO_TEMA".to_string()
             } else if fase == "JOGANDO" {
                 "TENTATIVA_SOLETRAÇÃO".to_string()
@@ -159,9 +167,9 @@ impl NucleoAlfabetizacao {
         let estado = self.db.obter_estado_missao(id_crianca);
         let mut tema_escolhido = "Geral".to_string();
         
-        if let Some((_fase, tema_salvo, _palavra, _acertos, _total)) = estado {
+        if let Some((_fase, _tema, opcoes_tema, _palavra, _acertos, _total)) = estado {
             let txt_limpo = texto_digitado.trim();
-            let opcoes: Vec<&str> = tema_salvo.split(',').collect();
+            let opcoes: Vec<&str> = opcoes_tema.split(',').collect();
             
             tema_escolhido = match txt_limpo {
                 "1" => opcoes.get(0).unwrap_or(&"Geral").to_string(),
@@ -200,7 +208,7 @@ impl NucleoAlfabetizacao {
             return self.fluxo_bate_papo(id_crianca, palavra_digitada);
         }
         
-        let (_fase, tema, palavra_esperada, acertos, total) = estado.unwrap();
+        let (_fase, tema, opcoes_tema, palavra_esperada, acertos, total) = estado.unwrap();
         
         let acertou = self.corretor.verificar_desafio(palavra_digitada, &palavra_esperada);
         
@@ -240,13 +248,36 @@ impl NucleoAlfabetizacao {
                     .unwrap_or_else(|_| format!("Muito bem! Você acertou {} de {}! Agora escreva '{}'.", novos_acertos, total, nova_palavra))
             } else {
                 // Missão concluída!
-                let _ = self.db.limpar_desafio(id_crianca);
                 let prompt_conclusao = self.banco_prompts.montar_prompt(
                     "conclusao_missao", &[("palavra_acertada", &palavra_esperada)]
                 );
                 
-                self.llama.inferir(&prompt_conclusao, self.banco_prompts.temperaturas.bate_papo)
-                    .unwrap_or_else(|_| "Uau! Você completou toda a missão! Parabéns! Digite 1 para nova missão, ou 2 para Bater Papo!".to_string())
+                let msg_conclusao = self.llama.inferir(&prompt_conclusao, self.banco_prompts.temperaturas.bate_papo)
+                    .unwrap_or_else(|_| "Uau! Você completou toda a missão! Parabéns!".to_string());
+                
+                // Filtra as opções não escolhidas ainda
+                let mut opcoes_restantes: Vec<&str> = opcoes_tema.split(',').collect();
+                opcoes_restantes.retain(|&x| x.trim().to_lowercase() != tema.trim().to_lowercase());
+                
+                if opcoes_restantes.len() >= 2 {
+                    let t1 = opcoes_restantes[0].trim();
+                    let t2 = opcoes_restantes[1].trim();
+                    
+                    let string_temas = format!("{},{}", t1, t2);
+                    let _ = self.db.iniciar_escolha_tema(id_crianca, &string_temas);
+                    
+                    format!("{}\nVamos para a próxima missão? Escolha:\n1 - {}\n2 - {}\n3 - Bater Papo", msg_conclusao, t1, t2)
+                } else if opcoes_restantes.len() == 1 {
+                    let t1 = opcoes_restantes[0].trim();
+                    
+                    let string_temas = t1.to_string();
+                    let _ = self.db.iniciar_escolha_tema(id_crianca, &string_temas);
+                    
+                    format!("{}\nFalta apenas um tema! Escolha:\n1 - {}\n2 - Bater Papo", msg_conclusao, t1)
+                } else {
+                    let _ = self.db.limpar_desafio(id_crianca);
+                    format!("{}\nVocê fechou todos os temas! Que incrível! Digite 1 para nova missão, ou 2 para Bater Papo!", msg_conclusao)
+                }
             }
         } else {
             let _ = self.db.salvar_erro(id_crianca, &palavra_esperada);
