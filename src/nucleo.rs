@@ -123,13 +123,8 @@ impl NucleoAlfabetizacao {
         let palavra_sorteada = self.corretor.sortear_palavra();
         let _ = self.db.definir_desafio(id_crianca, &palavra_sorteada);
         
-        let prompt = self.banco_prompts.montar_prompt(
-            "lancar_desafio", 
-            &[("palavra_desafio", &palavra_sorteada)]
-        );
-        
-        self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo)
-            .unwrap_or_else(|_| format!("Oba! Vamos soletrar! Como se escreve '{}'?", palavra_sorteada))
+        // Em dispositivos IoT limitados, evitar uso de LLM para templates estritos economiza processamento e evita alucinações
+        format!("Oba! Vamos soletrar! Como se escreve a palavra '{}'?", palavra_sorteada)
     }
 
     fn fluxo_avaliar_soletracao(&self, id_crianca: &str, palavra_digitada: &str) -> String {
