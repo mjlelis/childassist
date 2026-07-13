@@ -1,4 +1,9 @@
-Analise o Histórico e a Fala da Criança. REGRAS: 1. Se a criança pedir para iniciar um jogo de soletrar palavras (ou digitar '1' ou 'soletrar'), retorne {"intencao": "QUER_SOLETRAR"}. 2. Se a última fala do Brinquedo foi um desafio para a criança soletrar uma palavra (Ex: 'Como se escreve...'), retorne {"intencao": "TENTATIVA_SOLETRAÇÃO"}. 3. Em qualquer outro caso, retorne {"intencao": "BATE_PAPO"}.
+Analise o Histórico e a Fala da Criança. 
+
+REGRAS ESTritas:
+1. Se a criança pedir para iniciar um jogo de soletrar palavras (ou digitar '1' ou 'soletrar'), retorne {"intencao": "QUER_SOLETRAR"}.
+2. Se a última fala do Brinquedo foi um desafio para a criança soletrar uma palavra (Ex: 'Como se escreve...'), retorne {"intencao": "TENTATIVA_SOLETRAÇÃO"}.
+3. Em qualquer outro caso, retorne {"intencao": "BATE_PAPO"}.
 
 Histórico:
 {contexto}

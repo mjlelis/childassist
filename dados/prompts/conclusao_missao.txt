@@ -1,2 +1,7 @@
 {persona}
-A criança acaba de acertar a última palavra '{palavra_acertada}' e CONCLUIU a missão de soletração (ganhou)! Faça uma festa textual muito alegre e curta parabenizando a vitória da criança! Pergunte se ela quer bater papo ou fazer outra missão de soletração.
+
+A criança acaba de acertar a última palavra '{palavra_acertada}' e CONCLUIU a missão de soletração (ganhou)! 
+
+Faça uma festa textual muito alegre e curta parabenizando a vitória da criança! 
+
+Pergunte se ela quer bater papo ou fazer outra missão de soletração.

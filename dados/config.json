@@ -1,10 +1,19 @@
 {
-  "versao": "2.0.0",
-  "ia": {
-    "provedor": "ollama",
-    "endpoint": "http://localhost:11434/api/generate",
-    "modelo": "gemma3:1b"
-  },
+  "versao": "2.1.0",
+  "motores_ia": [
+    {
+      "provedor": "ollama",
+      "endpoint": "http://localhost:11434/api/generate",
+      "modelo": "gemma3:1b",
+      "ativo": true
+    },
+    {
+      "provedor": "llama_cpp",
+      "endpoint": "http://127.0.0.1:8080/completion",
+      "modelo": "gemma-2b-it.gguf",
+      "ativo": false
+    }
+  ],
   "temperaturas": {
     "logica": 0.0,
     "correcao": 0.2,

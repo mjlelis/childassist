@@ -8,6 +8,7 @@ pub struct ConfigIA {
     pub provedor: String,
     pub endpoint: String,
     pub modelo: String,
+    pub ativo: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -20,7 +21,7 @@ pub struct Temperaturas {
 #[derive(Debug, Deserialize, Clone)]
 pub struct ConfigGeral {
     pub versao: String,
-    pub ia: ConfigIA,
+    pub motores_ia: Vec<ConfigIA>,
     pub temperaturas: Temperaturas,
 }
 
@@ -38,6 +39,17 @@ impl BancoDePrompts {
             .map_err(|e| format!("Erro ao ler config {}: {}", caminho_config, e))?;
         let config: ConfigGeral = serde_json::from_str(&config_str)
             .map_err(|e| format!("Erro ao fazer parse do config.json: {}", e))?;
+
+        let ativos: Vec<ConfigIA> = config.motores_ia.into_iter().filter(|ia| ia.ativo).collect();
+        
+        if ativos.len() != 1 {
+            return Err(format!(
+                "Erro Crítico de Configuração: Esperado EXATAMENTE 1 motor de IA com 'ativo: true'. Encontrados: {}. Corrija o arquivo config.json.", 
+                ativos.len()
+            ));
+        }
+        
+        let ia_ativa = ativos[0].clone();
 
         let mut personas = HashMap::new();
         let mut fluxos = HashMap::new();
@@ -60,7 +72,7 @@ impl BancoDePrompts {
         }
 
         Ok(Self {
-            ia: config.ia,
+            ia: ia_ativa,
             temperaturas: config.temperaturas,
             personas,
             fluxos,
