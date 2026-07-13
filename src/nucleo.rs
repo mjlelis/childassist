@@ -2,64 +2,9 @@ use crate::gerenciador_prompts::BancoDePrompts;
 use crate::db_sessao::DbSessao;
 use crate::ferramentas::sanitizador::{Sanitizador, StatusEntrada};
 use crate::ferramentas::corretor::CorretorMock;
+use crate::motor_ia::MotorIA;
 use std::sync::Arc;
 use serde::Deserialize;
-
-// Engine do Ollama rodando localmente no PC para testes.
-// Em produção mobile, essa camada seria substituída pela chamada local do `llama_cpp_rs`.
-pub struct OllamaEngine {
-    config_ia: crate::gerenciador_prompts::ConfigIA,
-    client: reqwest::blocking::Client,
-}
-
-#[derive(serde::Serialize)]
-struct OllamaRequest<'a> {
-    model: &'a str,
-    prompt: &'a str,
-    stream: bool,
-    options: OllamaOptions,
-}
-
-#[derive(serde::Serialize)]
-struct OllamaOptions {
-    temperature: f32,
-}
-
-#[derive(serde::Deserialize)]
-struct OllamaResponse {
-    response: String,
-}
-
-impl OllamaEngine {
-    pub fn new(config: crate::gerenciador_prompts::ConfigIA) -> Result<Self, String> {
-        Ok(Self {
-            config_ia: config,
-            client: reqwest::blocking::Client::new(),
-        })
-    }
-    
-    pub fn inferir(&self, prompt: &str, temperatura: f32) -> Result<String, String> {
-        let req_body = OllamaRequest {
-            model: &self.config_ia.modelo,
-            prompt,
-            stream: false,
-            options: OllamaOptions { temperature: temperatura },
-        };
-
-        let res = self.client.post(&self.config_ia.endpoint)
-            .json(&req_body)
-            .send()
-            .map_err(|e| format!("Erro requisição Ollama: {}", e))?;
-
-        if res.status().is_success() {
-            let ollama_res: OllamaResponse = res.json()
-                .map_err(|e| format!("Erro parse Ollama JSON: {}", e))?;
-            Ok(ollama_res.response.trim().to_string())
-        } else {
-            Err(format!("Erro Ollama Status: {}", res.status()))
-        }
-    }
-}
 
 #[derive(Deserialize)]
 struct RespostaIntencao {
@@ -68,7 +13,7 @@ struct RespostaIntencao {
 
 #[derive(uniffi::Object)]
 pub struct NucleoAlfabetizacao {
-    llama: Arc<OllamaEngine>,
+    llama: Arc<dyn MotorIA>,
     banco_prompts: Arc<BancoDePrompts>,
     db: Arc<DbSessao>,
     sanitizador: Arc<Sanitizador>,
@@ -85,13 +30,13 @@ impl NucleoAlfabetizacao {
         caminho_proibidas: String
     ) -> Result<Arc<Self>, String> {
         let banco_prompts = BancoDePrompts::carregar(&caminho_prompts)?;
-        let llama = OllamaEngine::new(banco_prompts.ia.clone())?;
+        let llama = crate::motor_ia::criar_motor(banco_prompts.ia.clone())?;
         let db = DbSessao::new(&caminho_db)?;
         let sanitizador = Sanitizador::new(&caminho_proibidas);
         let corretor = CorretorMock::new(&caminho_dicionario);
         
         Ok(Arc::new(Self {
-            llama: Arc::new(llama),
+            llama: llama.into(), // Converte Box<dyn MotorIA> para Arc<dyn MotorIA>
             banco_prompts: Arc::new(banco_prompts),
             db: Arc::new(db),
             sanitizador: Arc::new(sanitizador),

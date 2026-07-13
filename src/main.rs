@@ -1,0 +1,52 @@
+use projeto_alfabetizacao_rust::nucleo::NucleoAlfabetizacao;
+use std::io::{self, Write};
+
+fn main() {
+    println!("=======================================================");
+    println!("🚀 CHILDASSIST - NÚCLEO DE ALFABETIZAÇÃO (IoT Edition)");
+    println!("=======================================================");
+    println!("Iniciando sistema embarcado...");
+
+    // Caminhos relativos assumindo execução na raiz do repositório
+    let caminho_prompts = "dados/prompts.json".to_string();
+    let caminho_db = "dados/sessao_iot.sqlite".to_string();
+    let caminho_dicionario = "dados/dicionario_ptbr.json".to_string();
+    let caminho_proibidas = "dados/palavras_proibidas.txt".to_string();
+
+    let nucleo = match NucleoAlfabetizacao::new(
+        caminho_prompts,
+        caminho_db,
+        caminho_dicionario,
+        caminho_proibidas,
+    ) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("Erro crítico ao iniciar o núcleo: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    println!("✅ Núcleo iniciado com sucesso! Digite 'sair' para encerrar.\n");
+
+    loop {
+        print!("Criança: ");
+        io::stdout().flush().unwrap();
+
+        let mut entrada = String::new();
+        io::stdin().read_line(&mut entrada).unwrap();
+        
+        let entrada = entrada.trim();
+        if entrada.eq_ignore_ascii_case("sair") {
+            println!("Encerrando o sistema...");
+            break;
+        }
+
+        if entrada.is_empty() {
+            continue;
+        }
+
+        // Simula o processamento do brinquedo e resposta em áudio (no caso, print)
+        let resposta = nucleo.processar_entrada("crianca_iot_1".to_string(), entrada.to_string());
+        println!("🤖 Brinquedo: {}\n", resposta);
+    }
+}
