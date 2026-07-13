@@ -24,12 +24,13 @@ pub struct NucleoAlfabetizacao {
 impl NucleoAlfabetizacao {
     #[uniffi::constructor]
     pub fn new(
-        caminho_prompts: String, 
+        caminho_config: String, 
+        dir_prompts: String,
         caminho_db: String,
         caminho_dicionario: String,
         caminho_proibidas: String
     ) -> Result<Arc<Self>, String> {
-        let banco_prompts = BancoDePrompts::carregar(&caminho_prompts)?;
+        let banco_prompts = BancoDePrompts::carregar(&caminho_config, &dir_prompts)?;
         let llama = crate::motor_ia::criar_motor(banco_prompts.ia.clone())?;
         let db = DbSessao::new(&caminho_db)?;
         let sanitizador = Sanitizador::new(&caminho_proibidas);

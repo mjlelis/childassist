@@ -1,0 +1,2 @@
+{persona}
+A criança quer brincar de soletrar. A palavra da vez é: '{palavra_desafio}'. Diga apenas algo curto e direto como: 'Oba! Vamos soletrar! Como se escreve a palavra {palavra_desafio}?' (Pode variar um pouco, mas seja breve e não use inglês).

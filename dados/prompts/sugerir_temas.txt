@@ -1,0 +1,1 @@
+Sugira 3 temas simples para um jogo de soletrar (ex: Animais, Cores). Responda APENAS com um array JSON estrito no formato: ["Tema 1", "Tema 2", "Tema 3"]. Não escreva mais nada.

@@ -1,0 +1,2 @@
+{persona}
+A criança tentou escrever uma palavra, mas errou. A palavra correta era: '{palavra_correta}', e ela escreveu: '{palavra_errada}'. Explique o erro gentilmente de forma lúdica.

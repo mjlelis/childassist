@@ -8,13 +8,15 @@ fn main() {
     println!("Iniciando sistema embarcado...");
 
     // Caminhos relativos assumindo execução na raiz do repositório
-    let caminho_prompts = "dados/prompts.json".to_string();
+    let caminho_config = "dados/config.json".to_string();
+    let dir_prompts = "dados/prompts".to_string();
     let caminho_db = "dados/sessao_iot.sqlite".to_string();
     let caminho_dicionario = "dados/dicionario_ptbr.json".to_string();
     let caminho_proibidas = "dados/palavras_proibidas.txt".to_string();
 
     let nucleo = match NucleoAlfabetizacao::new(
-        caminho_prompts,
+        caminho_config,
+        dir_prompts,
         caminho_db,
         caminho_dicionario,
         caminho_proibidas,

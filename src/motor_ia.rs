@@ -64,27 +64,53 @@ impl MotorIA for OllamaEngine {
 }
 
 // ==========================================
-// LLAMA.CPP ENGINE (Para embarcado / offline)
+// LLAMA.CPP SERVER ENGINE (Chave rápida para ambiente local)
 // ==========================================
-// Mock de implementação que futuramente integrará com `llama_cpp_rs`.
-pub struct LlamaCppEngine {
-    _caminho_modelo: String,
+pub struct LlamaCppServerEngine {
+    config_ia: ConfigIA,
+    client: reqwest::blocking::Client,
 }
 
-impl LlamaCppEngine {
-    pub fn new(caminho_modelo: String) -> Result<Self, String> {
+#[derive(serde::Serialize)]
+struct LlamaServerRequest<'a> {
+    prompt: &'a str,
+    temperature: f32,
+    stream: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct LlamaServerResponse {
+    content: String,
+}
+
+impl LlamaCppServerEngine {
+    pub fn new(config: ConfigIA) -> Result<Self, String> {
         Ok(Self {
-            _caminho_modelo: caminho_modelo,
+            config_ia: config,
+            client: reqwest::blocking::Client::new(),
         })
     }
 }
 
-impl MotorIA for LlamaCppEngine {
-    fn inferir(&self, prompt: &str, _temperatura: f32) -> Result<String, String> {
-        if prompt.contains("Analise a fala") {
-            Ok(r#"{"intencao": "SOLETRAÇÃO"}"#.to_string())
+impl MotorIA for LlamaCppServerEngine {
+    fn inferir(&self, prompt: &str, temperatura: f32) -> Result<String, String> {
+        let req_body = LlamaServerRequest {
+            prompt,
+            temperature: temperatura,
+            stream: false,
+        };
+
+        let res = self.client.post(&self.config_ia.endpoint)
+            .json(&req_body)
+            .send()
+            .map_err(|e| format!("Erro requisição Llama Server: {}", e))?;
+
+        if res.status().is_success() {
+            let llama_res: LlamaServerResponse = res.json()
+                .map_err(|e| format!("Erro parse Llama Server JSON: {}", e))?;
+            Ok(llama_res.content.trim().to_string())
         } else {
-            Ok("Resposta direta gerada pelo Llama C++ (Offline).".to_string())
+            Err(format!("Erro Llama Server Status: {}", res.status()))
         }
     }
 }
@@ -95,7 +121,7 @@ impl MotorIA for LlamaCppEngine {
 pub fn criar_motor(config: ConfigIA) -> Result<Box<dyn MotorIA>, String> {
     match config.provedor.as_str() {
         "ollama" => Ok(Box::new(OllamaEngine::new(config)?)),
-        "llama_cpp" => Ok(Box::new(LlamaCppEngine::new(config.modelo)?)),
+        "llama_cpp" => Ok(Box::new(LlamaCppServerEngine::new(config)?)),
         _ => Err(format!("Provedor desconhecido: {}", config.provedor)),
     }
 }

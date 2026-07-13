@@ -1,0 +1,13 @@
+{
+  "versao": "2.0.0",
+  "ia": {
+    "provedor": "ollama",
+    "endpoint": "http://localhost:11434/api/generate",
+    "modelo": "gemma3:1b"
+  },
+  "temperaturas": {
+    "logica": 0.0,
+    "correcao": 0.2,
+    "bate_papo": 0.7
+  }
+}

@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ConfigIA {
@@ -17,8 +18,14 @@ pub struct Temperaturas {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct BancoDePrompts {
+pub struct ConfigGeral {
     pub versao: String,
+    pub ia: ConfigIA,
+    pub temperaturas: Temperaturas,
+}
+
+#[derive(Debug, Clone)]
+pub struct BancoDePrompts {
     pub ia: ConfigIA,
     pub temperaturas: Temperaturas,
     pub personas: HashMap<String, String>,
@@ -26,11 +33,38 @@ pub struct BancoDePrompts {
 }
 
 impl BancoDePrompts {
-    pub fn carregar(caminho: &str) -> Result<Self, String> {
-        let conteudo = fs::read_to_string(caminho)
-            .map_err(|e| format!("Erro ao ler {}: {}", caminho, e))?;
-        serde_json::from_str(&conteudo)
-            .map_err(|e| format!("Erro ao fazer parse do JSON de prompts: {}", e))
+    pub fn carregar(caminho_config: &str, dir_prompts: &str) -> Result<Self, String> {
+        let config_str = fs::read_to_string(caminho_config)
+            .map_err(|e| format!("Erro ao ler config {}: {}", caminho_config, e))?;
+        let config: ConfigGeral = serde_json::from_str(&config_str)
+            .map_err(|e| format!("Erro ao fazer parse do config.json: {}", e))?;
+
+        let mut personas = HashMap::new();
+        let mut fluxos = HashMap::new();
+
+        if let Ok(entradas) = fs::read_dir(dir_prompts) {
+            for entrada in entradas.flatten() {
+                let path = entrada.path();
+                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("txt") {
+                    let nome_arquivo = path.file_stem().unwrap().to_str().unwrap().to_string();
+                    let conteudo = fs::read_to_string(&path).unwrap_or_default();
+                    
+                    if nome_arquivo.starts_with("persona_") {
+                        let chave_persona = nome_arquivo.replace("persona_", "");
+                        personas.insert(chave_persona, conteudo);
+                    } else {
+                        fluxos.insert(nome_arquivo, conteudo);
+                    }
+                }
+            }
+        }
+
+        Ok(Self {
+            ia: config.ia,
+            temperaturas: config.temperaturas,
+            personas,
+            fluxos,
+        })
     }
 
     pub fn montar_prompt(&self, chave_fluxo: &str, variaveis: &[(&str, &str)]) -> String {
@@ -38,7 +72,6 @@ impl BancoDePrompts {
             .cloned()
             .unwrap_or_else(|| String::from("Fluxo não encontrado."));
 
-        // Injeta a persona padrão se existir a tag
         if texto.contains("{persona}") {
             let persona = self.personas.get("professor_alfa")
                 .cloned()
@@ -46,7 +79,6 @@ impl BancoDePrompts {
             texto = texto.replace("{persona}", &persona);
         }
 
-        // Substitui variáveis dinâmicas
         for (chave, valor) in variaveis {
             let tag = format!("{{{}}}", chave);
             texto = texto.replace(&tag, valor);
