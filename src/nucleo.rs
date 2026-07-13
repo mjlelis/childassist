@@ -45,6 +45,9 @@ impl NucleoAlfabetizacao {
     }
 
     pub fn iniciar_interacao(&self, id_crianca: String) -> String {
+        // Limpa qualquer desafio pendente de sessões anteriores que fecharam de forma abrupta
+        let _ = self.db.limpar_desafio(&id_crianca);
+        
         let prompt = self.banco_prompts.montar_prompt("boas_vindas", &[]);
         let resposta = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo)
             .unwrap_or_else(|_| "Oi! Eu sou o seu tutor. O que vamos descobrir hoje?".to_string());
