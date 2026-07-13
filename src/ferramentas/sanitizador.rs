@@ -1,4 +1,3 @@
-use regex::Regex;
 use std::fs;
 
 #[derive(Debug, PartialEq)]
@@ -10,7 +9,6 @@ pub enum StatusEntrada {
 
 pub struct Sanitizador {
     palavras_proibidas: Vec<String>,
-    regex_repeticao: Regex,
 }
 
 impl Sanitizador {
@@ -24,7 +22,6 @@ impl Sanitizador {
             
         Self {
             palavras_proibidas: proibidas,
-            regex_repeticao: Regex::new(r"(.)\1{4,}").unwrap(), // Mais de 4 repetições do mesmo caractere
         }
     }
 
@@ -37,8 +34,19 @@ impl Sanitizador {
             }
         }
         
-        if self.regex_repeticao.is_match(&texto_lower) {
-            return StatusEntrada::Spam;
+        let mut last_char = '\0';
+        let mut count = 0;
+        
+        for c in texto_lower.chars() {
+            if c == last_char && c.is_alphabetic() {
+                count += 1;
+                if count >= 4 {
+                    return StatusEntrada::Spam;
+                }
+            } else {
+                last_char = c;
+                count = 0;
+            }
         }
         
         StatusEntrada::Valida
