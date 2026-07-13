@@ -64,7 +64,7 @@ impl NucleoAlfabetizacao {
         }
 
         // 2. Classificação de Intenção com Temperatura 0.0
-        let intencao = self.classificar_intencao(&texto_digitado);
+        let intencao = self.classificar_intencao(&id_crianca, &texto_digitado);
 
         // 3. Roteamento Seguro
         let resposta = match intencao.as_str() {
@@ -79,10 +79,14 @@ impl NucleoAlfabetizacao {
 }
 
 impl NucleoAlfabetizacao {
-    fn classificar_intencao(&self, texto: &str) -> String {
+    fn classificar_intencao(&self, id_crianca: &str, texto: &str) -> String {
+        let contexto = self.db.obter_contexto(id_crianca, 2).unwrap_or_default();
         let prompt = self.banco_prompts.montar_prompt(
             "classificador_intencao", 
-            &[("fala_crianca", texto)]
+            &[
+                ("contexto", &contexto),
+                ("fala_crianca", texto)
+            ]
         );
         let temp = self.banco_prompts.temperaturas.logica; // 0.0
         
