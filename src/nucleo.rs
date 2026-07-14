@@ -148,8 +148,11 @@ impl NucleoAlfabetizacao {
         let json_resposta = self.llama.inferir(&prompt, 0.7)
             .unwrap_or_else(|_| "[\"Animais\", \"Frutas\", \"Cores\"]".to_string());
             
+        // Limpa possíveis blocos de markdown (```json ... ```) e quebras de linha
+        let raw = json_resposta.replace("```json", "").replace("```", "").replace("\n", "").replace("\r", "");
+        
         // Extrai temas do JSON de forma rústica para Edge IoT
-        let clean = json_resposta.replace("[", "").replace("]", "").replace("\"", "");
+        let clean = raw.replace("[", "").replace("]", "").replace("\"", "");
         let temas_array: Vec<&str> = clean.split(',').map(|s| s.trim()).collect();
         
         let t1 = temas_array.get(0).unwrap_or(&"Animais");
