@@ -1,89 +1,50 @@
-<div align="center">
-  <h1>🚀 ChildAssist - Edge AI Literacy Core</h1>
-  <p>
-    <strong>Núcleo de Inteligência Artificial Local em Rust para Aplicativos de Alfabetização Infantil</strong>
-  </p>
-  <p>
-    <img src="https://img.shields.io/badge/Language-Rust-orange.svg" alt="Rust" />
-    <img src="https://img.shields.io/badge/Platform-iOS%20%7C%20Android%20%7C%20Raspberry%20Pi-blue.svg" alt="Platforms" />
-    <img src="https://img.shields.io/badge/AI-Ollama%20%7C%20Llama.cpp-purple.svg" alt="AI" />
-    <img src="https://img.shields.io/github/v/release/mjlelis/childassist" alt="Version" />
-  </p>
-</div>
+# 🚀 ChildAssist - Núcleo de Alfabetização (IoT Edition)
+
+**ChildAssist** é um núcleo de inteligência educacional escrito puramente em **Rust**, projetado para rodar nativamente em ambientes restritos (Edge/IoT) como Raspberry Pi. O sistema atua como o "cérebro" de um brinquedo físico interativo, focando em ajudar crianças no processo de alfabetização de forma lúdica, engajadora e 100% offline.
+
+## ✨ Características Principais
+
+* **🚀 Alta Performance (Edge/IoT):** Desenvolvido em Rust, garantindo baixíssimo consumo de memória e inicialização instantânea, perfeito para dispositivos embarcados (Edge Computing).
+* **🧠 LLM Local e Offline:** O processamento de linguagem natural ocorre **localmente**, sem necessidade de internet. Suporta múltiplos motores como `Ollama` e `Llama.cpp` nativamente, garantindo total privacidade para a criança.
+* **🎭 Persona Lúdica (Professor Alfa):** A IA assume o papel do "Alfa", um assistente caloroso, enérgico e paciente. O sistema utiliza prompts projetados com engenharia cuidadosa para evitar alucinações e manter a IA sempre dentro do papel educacional.
+* **🗣️ Respostas em Tempo Real (Streaming):** Suporta streaming de texto para que a criança não tenha que esperar a IA terminar de pensar antes do brinquedo começar a falar/reagir.
+* **💾 Memória Persistente (SQLite):** O núcleo armazena o histórico do bate-papo, palavras já utilizadas na sessão e progresso da criança usando `rusqlite`, permitindo um acompanhamento linear.
+* **🛡️ Fallbacks Resilientes:** Se o LLM falhar, a inferência demorar, ou o input da criança for inesperado (como digitar "abobrinha" em uma seleção de números), a Máquina de Estados intercepta, estabiliza o fluxo e usa recursos *hardcoded* para evitar frustração na brincadeira.
+
+## ⚙️ Arquitetura
+
+O sistema é construído como uma **Máquina de Estados Finita**, roteando os eventos da criança com base na intenção e no contexto armazenado no banco de dados.
+
+* `src/nucleo.rs`: O coração da aplicação. Controla o fluxo de escolha de tema, lançamento de desafios, correções e bate_papo livre.
+* `src/motor_ia.rs`: Interface polimórfica que abstrai a comunicação com LLMs (Ollama ou LLama.cpp) através de requisições nativas HTTP.
+* `src/db_sessao.rs`: Camada de persistência leve SQLite focada no progresso (acertos, erros, temas esgotados).
+* `dados/config.json`: Ponto central de configuração. Permite o *switch* instantâneo de provedores de IA, alteração de endpoints e controle modular das temperaturas lógicas (Criatividade x Previsibilidade).
+* `dados/prompts/`: Arquivos `.txt` gerenciáveis com as diretrizes e regras comportamentais para cada etapa do jogo.
+
+## 🛠️ Como Executar
+
+1. **Requisitos:**
+   * Rust e Cargo instalados.
+   * Um servidor local de IA rodando (Ex: `Ollama` na porta 11434 ou `llama-server` na porta 8080).
+
+2. **Configuração do LLM:**
+   Abra `dados/config.json` e altere a flag `"ativo": true` para o provedor de sua preferência (ollama ou llama_cpp).
+
+3. **Iniciando a Brincadeira:**
+   No diretório do projeto, rode:
+   ```bash
+   cargo run
+   ```
+
+4. **Interagindo:**
+   Apenas siga as instruções no terminal. Digite `1` para começar o jogo de soletrar ou `2` para bater papo.
+
+## 💡 Fluxo de Jogo
+
+1. **Escolha de Tema:** A criança seleciona entre 3 temas lúdicos criados dinamicamente.
+2. **Missão de Soletrar:** A IA sorteia uma palavra baseada no tema, respeitando a complexidade de alfabetização e validando para nunca repetir a mesma palavra duas vezes.
+3. **Avaliação:** O núcleo avalia ortograficamente. Se acertar, gera uma celebração única. Se errar, providencia um reforço positivo.
+4. **Bate-Papo Livre:** A qualquer momento, a criança pode fugir do jogo e conversar sobre qualquer coisa. O LLM foi enjaulado para **não** tentar trazer o jogo de volta e deixar a criança livre no Bate Papo, provendo conversas naturais.
 
 ---
-
-## 📖 Sobre o Projeto
-
-O **ChildAssist** é um núcleo de alta performance construído nativamente em **Rust**. Ele foi projetado para atuar como o cérebro de inteligência artificial de aplicativos mobile e **sistemas embarcados (como brinquedos inteligentes rodando placas controladoras tipo Raspberry Pi)** focados na alfabetização infantil. 
-
-Por ser desenvolvido em Rust, ele opera de forma extremamente leve, rodando os LLMs 100% offline (Edge AI). No ecossistema mobile, ele interage de forma nativa utilizando `uniffi` (Kotlin e Swift). Quando embarcado em brinquedos e placas IoT, atua como um executável direto aproveitando ao máximo a memória limitadíssima do hardware.
-
-O sistema roteia interações, corrige soletrações de forma lúdica e mantém um bate-papo encorajador, blindado contra palavras inapropriadas e comportamentos de spam — tudo de forma local, preservando a privacidade das crianças.
-
-## ✨ Arquitetura e Funcionalidades
-
-- 🧠 **Motor de IA Flexível**: Integração nativa projetada para `llama.cpp` (produção mobile) e suporte a APIs locais (como Ollama) para ambiente de desenvolvimento.
-- 🛡️ **Sanitização de Borda**: Filtro nativo de alta velocidade usando Expressões Regulares (Regex) e cache de bloqueio antes de qualquer gasto de processamento de LLM.
-- 🌡️ **Temperatura Dinâmica**: Roteamento lógico estrito (0.0), correção pedagógica equilibrada (0.2) e conversas criativas flexíveis (0.7).
-- 🧩 **100% Externalizado**: Sem regras hardcoded. Todos os prompts, personas e fluxos são definidos e injetados via `prompts.json`.
-- 💾 **Memória Segura e Persistente**: Banco de dados SQLite (`rusqlite`) embarcado, com controle de Mutex à prova de concorrência.
-- 🌉 **Uniffi Scaffolding**: Geração automática de bibliotecas C-ABI nativas para injeção limpa no Xcode e Android Studio.
-
-## 🏗️ Como a Engenharia Funciona
-
-```mermaid
-graph TD
-    A[App Mobile] -->|uniffi C-ABI| B[Núcleo Rust]
-    B --> C{Sanitizador}
-    C -->|Proibido / Spam| D[Fallback Seguro]
-    C -->|Válido| E[Classificador de Intenção T: 0.0]
-    E -->|Soletração| F[Corretor Lógico + IA T: 0.2]
-    E -->|Bate-papo| G[Conversa Livre IA T: 0.7]
-    F <--> H[(SQLite Sessão)]
-```
-
-## 🛠️ Começando (Desenvolvimento Local)
-
-### Pré-requisitos
-- [Rust Toolchain](https://rustup.rs/) instalada (`rustc`, `cargo`).
-- [Ollama](https://ollama.com/) instalado na máquina (para simulação).
-
-### Instalação e Testes
-
-1. Baixe o modelo primário para testes de desenvolvimento (Ollama no background):
-   ```bash
-   ollama pull qwen2.5:3b
-   ```
-
-2. Clone o repositório e compile:
-   ```bash
-   git clone https://github.com/mjlelis/childassist.git
-   cd childassist
-   cargo build
-   ```
-
-3. Execute os testes garantindo que o Linter e Formatador estejam no padrão:
-   ```bash
-   cargo fmt --check
-   cargo clippy -- -D warnings
-   cargo check
-   ```
-
-## 📦 Gerando Bibliotecas Mobile (Entrega)
-
-Para compilar e gerar a ponte para Android (Kotlin) e iOS (Swift), utilizamos o utilitário do `uniffi`. Após compilar em modo `--release`, invoque o bindgen na biblioteca gerada.
-
-```bash
-cargo build --release
-cargo run --bin uniffi-bindgen generate --library target/release/libprojeto_alfabetizacao_rust.so --language swift --out-dir out/
-```
-
-## 🤝 Como Contribuir
-
-Ficamos felizes em aceitar colaborações para melhorar o ChildAssist!
-Por favor, leia nosso [CONTRIBUTING.md](./CONTRIBUTING.md) para detalhes sobre o nosso processo de submissão de Pull Requests. Utilizamos **Conventional Commits** e mantemos os mais altos padrões de código seguro (Safe Rust).
-
-## 📄 Licença
-
-Este projeto está sob licença apropriada. Consulte os administradores do repositório para detalhes sobre distribuição comercial mobile.
+Feito com 🦀 Rust para moldar o futuro da educação infantil!
