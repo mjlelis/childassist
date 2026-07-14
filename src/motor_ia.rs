@@ -3,7 +3,7 @@ use crate::gerenciador_prompts::ConfigIA;
 use std::io::BufRead;
 
 pub trait MotorIA: Send + Sync {
-    fn inferir(&self, prompt: &str, temperatura: f32, callback: Option<&mut dyn FnMut(&str)>) -> Result<String, String>;
+    fn inferir(&self, prompt: &str, temperatura: f32, callback: &mut Option<&mut dyn FnMut(&str)>) -> Result<String, String>;
 }
 
 // ==========================================
@@ -42,7 +42,7 @@ impl OllamaEngine {
 }
 
 impl MotorIA for OllamaEngine {
-    fn inferir(&self, prompt: &str, temperatura: f32, mut callback: Option<&mut dyn FnMut(&str)>) -> Result<String, String> {
+    fn inferir(&self, prompt: &str, temperatura: f32, callback: &mut Option<&mut dyn FnMut(&str)>) -> Result<String, String> {
         let req_body = OllamaRequest {
             model: &self.config_ia.modelo,
             prompt,
@@ -110,7 +110,7 @@ impl LlamaCppServerEngine {
 }
 
 impl MotorIA for LlamaCppServerEngine {
-    fn inferir(&self, prompt: &str, temperatura: f32, mut callback: Option<&mut dyn FnMut(&str)>) -> Result<String, String> {
+    fn inferir(&self, prompt: &str, temperatura: f32, callback: &mut Option<&mut dyn FnMut(&str)>) -> Result<String, String> {
         let req_body = LlamaServerRequest {
             prompt,
             temperature: temperatura,

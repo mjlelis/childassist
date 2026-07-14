@@ -68,10 +68,10 @@ impl NucleoAlfabetizacao {
         self.processar_entrada_internal(id_crianca, texto_digitado, Some(&mut boxed_cb))
     }
 
-    fn iniciar_interacao_internal(&self, id_crianca: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
+    fn iniciar_interacao_internal(&self, id_crianca: &str, mut callback: Option<&mut dyn FnMut(&str)>) -> String {
         let _ = self.db.limpar_desafio(id_crianca);
         let prompt = self.banco_prompts.montar_prompt("boas_vindas", &[]);
-        let resposta = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo, callback)
+        let resposta = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo, &mut callback)
             .unwrap_or_else(|_| "Oi! Eu sou o seu tutor. O que vamos descobrir hoje?".to_string());
         
         let _ = self.db.salvar_mensagem(id_crianca, "Brinquedo", &resposta);
@@ -155,7 +155,7 @@ impl NucleoAlfabetizacao {
         let temp = self.banco_prompts.temperaturas.logica; // 0.0
         
         // Modelos de raciocínio lógico NUNCA fazem stream
-        match self.llama.inferir(&prompt, temp, None) {
+        match self.llama.inferir(&prompt, temp, &mut None) {
             Ok(resp_json) => {
                 if let Ok(parsed) = serde_json::from_str::<RespostaIntencao>(&resp_json) {
                     parsed.intencao
@@ -169,7 +169,7 @@ impl NucleoAlfabetizacao {
 
     fn fluxo_iniciar_escolha_tema(&self, id_crianca: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
         let prompt = self.banco_prompts.montar_prompt("sugerir_temas", &[]);
-        let json_resposta = self.llama.inferir(&prompt, 0.7, None)
+        let json_resposta = self.llama.inferir(&prompt, 0.7, &mut None)
             .unwrap_or_else(|_| "[\"Animais\", \"Frutas\", \"Cores\"]".to_string());
             
         // Limpa possíveis blocos de markdown (```json ... ```) e quebras de linha
@@ -233,7 +233,7 @@ impl NucleoAlfabetizacao {
                 ("palavra_anterior", "nenhuma")
             ]
         );
-        let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica, None) {
+        let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica, &mut None) {
             Ok(p) => {
                 let limpo = p.trim();
                 let partes: Vec<&str> = limpo.split_whitespace().collect();
@@ -254,13 +254,17 @@ impl NucleoAlfabetizacao {
             "lancar_desafio", 
             &[("palavra_desafio", &palavra_sorteada)]
         );
-        let msg = self.llama.inferir(&prompt_lancar, self.banco_prompts.temperaturas.bate_papo, callback)
+        let msg = self.llama.inferir(&prompt_lancar, self.banco_prompts.temperaturas.bate_papo, &mut callback)
             .unwrap_or_else(|_| format!("Missão de '{}' iniciada! Vamos soletrar 3 palavras.", tema_escolhido));
             
-        format!("{} Como se escreve a palavra '{}'?", msg, palavra_sorteada)
+        let sufixo = format!(" Como se escreve a palavra '{}'?", palavra_sorteada);
+        if let Some(ref mut cb) = callback {
+            cb(&sufixo);
+        }
+        format!("{}{}", msg, sufixo)
     }
 
-    fn fluxo_avaliar_soletracao(&self, id_crianca: &str, palavra_digitada: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
+    fn fluxo_avaliar_soletracao(&self, id_crianca: &str, palavra_digitada: &str, mut callback: Option<&mut dyn FnMut(&str)>) -> String {
         let estado = self.db.obter_estado_missao(id_crianca);
         
         if estado.is_none() {
@@ -283,7 +287,7 @@ impl NucleoAlfabetizacao {
                     ]
                 );
                 
-                let mut nova_palavra = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica, None) {
+                let mut nova_palavra = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica, &mut None) {
                     Ok(p) => {
                         let limpo = p.trim();
                         let partes: Vec<&str> = limpo.split_whitespace().collect();
@@ -307,44 +311,52 @@ impl NucleoAlfabetizacao {
                     ]
                 );
                 
-                let cb = callback;
-                let celeb = self.llama.inferir(&prompt_progresso, self.banco_prompts.temperaturas.bate_papo, cb)
+                let celeb = self.llama.inferir(&prompt_progresso, self.banco_prompts.temperaturas.bate_papo, &mut callback)
                     .unwrap_or_else(|_| format!("Muito bem! Você acertou {} de {}!", novos_acertos, total));
                     
-                format!("{} Próxima palavra: Como se escreve '{}'?", celeb, nova_palavra)
+                let sufixo = format!(" Próxima palavra: Como se escreve '{}'?", nova_palavra);
+                if let Some(ref mut c) = callback {
+                    c(&sufixo);
+                }
+                format!("{}{}", celeb, sufixo)
             } else {
                 // Missão concluída!
                 let prompt_conclusao = self.banco_prompts.montar_prompt(
                     "conclusao_missao", &[("palavra_acertada", &palavra_esperada)]
                 );
                 
-                let cb = callback;
-                let msg_conclusao = self.llama.inferir(&prompt_conclusao, self.banco_prompts.temperaturas.bate_papo, cb)
+                let msg_conclusao = self.llama.inferir(&prompt_conclusao, self.banco_prompts.temperaturas.bate_papo, &mut callback)
                     .unwrap_or_else(|_| "Uau! Você completou toda a missão! Parabéns!".to_string());
                 
                 // Filtra as opções não escolhidas ainda
                 let mut opcoes_restantes: Vec<&str> = opcoes_tema.split(',').collect();
                 opcoes_restantes.retain(|&x| x.trim().to_lowercase() != tema.trim().to_lowercase());
                 
-                if opcoes_restantes.len() >= 2 {
+                let sufixo = if opcoes_restantes.len() >= 2 {
                     let t1 = opcoes_restantes[0].trim();
                     let t2 = opcoes_restantes[1].trim();
                     
                     let string_temas = format!("{},{}", t1, t2);
                     let _ = self.db.iniciar_escolha_tema(id_crianca, &string_temas);
                     
-                    format!("{}\nVamos para a próxima missão? Escolha:\n1 - {}\n2 - {}\n3 - Bater Papo", msg_conclusao, t1, t2)
+                    format!("\nVamos para a próxima missão? Escolha:\n1 - {}\n2 - {}\n3 - Bater Papo", t1, t2)
                 } else if opcoes_restantes.len() == 1 {
                     let t1 = opcoes_restantes[0].trim();
                     
                     let string_temas = t1.to_string();
                     let _ = self.db.iniciar_escolha_tema(id_crianca, &string_temas);
                     
-                    format!("{}\nFalta apenas um tema! Escolha:\n1 - {}\n2 - Bater Papo", msg_conclusao, t1)
+                    format!("\nFalta apenas um tema! Escolha:\n1 - {}\n2 - Bater Papo", t1)
                 } else {
                     let _ = self.db.limpar_desafio(id_crianca);
-                    format!("{}\nVocê fechou todos os temas! Que incrível! Digite 1 para nova missão, ou 2 para Bater Papo!", msg_conclusao)
+                    format!("\nVocê fechou todos os temas! Que incrível! Digite 1 para nova missão, ou 2 para Bater Papo!")
+                };
+                
+                if let Some(ref mut c) = callback {
+                    c(&sufixo);
                 }
+                
+                format!("{}{}", msg_conclusao, sufixo)
             }
         } else {
             let _ = self.db.salvar_erro(id_crianca, &palavra_esperada);
@@ -357,15 +369,18 @@ impl NucleoAlfabetizacao {
                 ]
             );
             
-            let cb = callback;
-            let correcao = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.correcao, cb)
+            let correcao = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.correcao, &mut callback)
                 .unwrap_or_else(|_| "Acontece!".to_string());
                 
-            format!("{} Vamos tentar de novo? Como se escreve '{}'?", correcao, palavra_esperada)
+            let sufixo = format!(" Vamos tentar de novo? Como se escreve '{}'?", palavra_esperada);
+            if let Some(ref mut c) = callback {
+                c(&sufixo);
+            }
+            format!("{}{}", correcao, sufixo)
         }
     }
     
-    fn fluxo_bate_papo(&self, id_crianca: &str, texto: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
+    fn fluxo_bate_papo(&self, id_crianca: &str, texto: &str, mut callback: Option<&mut dyn FnMut(&str)>) -> String {
         let contexto = self.db.obter_contexto(id_crianca, 4).unwrap_or_default();
         let prompt = self.banco_prompts.montar_prompt(
             "bate_papo_livre", 
@@ -375,7 +390,7 @@ impl NucleoAlfabetizacao {
             ]
         );
         
-        self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo, callback)
+        self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo, &mut callback)
             .unwrap_or_else(|_| "Que legal! Me conte mais!".to_string())
     }
 }
