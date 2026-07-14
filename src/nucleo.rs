@@ -68,12 +68,27 @@ impl NucleoAlfabetizacao {
         self.processar_entrada_internal(id_crianca, texto_digitado, Some(&mut boxed_cb))
     }
 
+    fn montar_prompt_com_nome(&self, id_crianca: &str, nome_prompt: &str, vars: &[(&str, &str)]) -> String {
+        let nome = self.db.obter_nome(id_crianca).unwrap_or_else(|| "Amiguinho(a)".to_string());
+        let mut novas_vars = vars.to_vec();
+        novas_vars.push(("nome_crianca", &nome));
+        self.banco_prompts.montar_prompt(nome_prompt, &novas_vars)
+    }
+
     fn iniciar_interacao_internal(&self, id_crianca: &str, mut callback: Option<&mut dyn FnMut(&str)>) -> String {
         let _ = self.db.limpar_desafio(id_crianca);
-        let prompt = self.banco_prompts.montar_prompt("boas_vindas", &[]);
-        let resposta = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo, &mut callback)
-            .unwrap_or_else(|_| "Oi! Eu sou o seu tutor. O que vamos descobrir hoje?".to_string());
+        let _ = self.db.iniciar_espera_nome(id_crianca); // Seta estado como ESPERANDO_NOME
         
+        let prompt = self.montar_prompt_com_nome(id_crianca, "boas_vindas", &[]);
+        let mut msg = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo, &mut callback)
+            .unwrap_or_else(|_| "Olá! Sou o Alfa, seu amigo!".to_string());
+            
+        let sufixo = " Qual é o seu nome?";
+        if let Some(ref mut cb) = callback {
+            cb(sufixo);
+        }
+        
+        let resposta = format!("{}{}", msg, sufixo);
         let _ = self.db.salvar_mensagem(id_crianca, "Brinquedo", &resposta);
         resposta
     }
@@ -98,7 +113,9 @@ impl NucleoAlfabetizacao {
                 return "Missão cancelada! Você quer tentar soletrar de novo (1) ou bater papo (2)?".to_string();
             }
 
-            if fase == "ESCOLHENDO_TEMA" {
+            if fase == "ESPERANDO_NOME" {
+                "RECEBER_NOME".to_string()
+            } else if fase == "ESCOLHENDO_TEMA" {
                 let num_opcoes = opcoes.split(',').count();
                 if txt_limpo == "3" && num_opcoes == 2 {
                     let _ = self.db.limpar_desafio(&id_crianca);
@@ -130,6 +147,7 @@ impl NucleoAlfabetizacao {
         // Passamos 'take' no callback pois ele não copia. Passamos mutávelmente referenciando o que já era ref mut
         let cb = callback;
         let resposta = match intencao.as_str() {
+            "RECEBER_NOME" => self.fluxo_receber_nome(id_crianca, texto_digitado, cb),
             "QUER_SOLETRAR" => self.fluxo_iniciar_escolha_tema(id_crianca, cb),
             "ESCOLHENDO_TEMA" => self.fluxo_iniciar_soletracao(id_crianca, texto_digitado, cb),
             "TENTATIVA_SOLETRAÇÃO" => self.fluxo_avaliar_soletracao(id_crianca, texto_digitado, cb),
@@ -143,9 +161,26 @@ impl NucleoAlfabetizacao {
 }
 
 impl NucleoAlfabetizacao {
+    fn fluxo_receber_nome(&self, id_crianca: &str, texto_digitado: &str, mut callback: Option<&mut dyn FnMut(&str)>) -> String {
+        // Assume que a entrada inteira é o nome, e pega a primeira palavra principal caso tenha frase.
+        let palavras: Vec<&str> = texto_digitado.trim().split_whitespace().collect();
+        // A criança pode digitar "meu nome é mauricio" ou "mauricio". Vamos simplificar extraindo a última palavra.
+        let nome = palavras.last().unwrap_or(&"Amiguinho").to_string();
+        
+        let _ = self.db.salvar_nome(id_crianca, &nome);
+        let _ = self.db.limpar_desafio(id_crianca); // Libera da fase ESPERANDO_NOME
+        
+        let msg = format!("Muito prazer, {}! Vamos brincar? Digite 1 para Soletrar, ou 2 para Bater Papo.", nome);
+        if let Some(cb) = callback {
+            cb(&msg);
+        }
+        msg
+    }
+
     fn classificar_intencao(&self, id_crianca: &str, texto: &str) -> String {
         let contexto = self.db.obter_contexto(id_crianca, 2).unwrap_or_default();
-        let prompt = self.banco_prompts.montar_prompt(
+        let prompt = self.montar_prompt_com_nome(
+            id_crianca,
             "classificador_intencao", 
             &[
                 ("contexto", &contexto),
@@ -168,7 +203,7 @@ impl NucleoAlfabetizacao {
     }
 
     fn fluxo_iniciar_escolha_tema(&self, id_crianca: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
-        let prompt = self.banco_prompts.montar_prompt("sugerir_temas", &[]);
+        let prompt = self.montar_prompt_com_nome(id_crianca, "sugerir_temas", &[]);
         let json_resposta = self.llama.inferir(&prompt, 0.7, &mut None)
             .unwrap_or_else(|_| "[\"Animais\", \"Frutas\", \"Cores\"]".to_string());
             
@@ -226,7 +261,8 @@ impl NucleoAlfabetizacao {
             return self.fluxo_iniciar_escolha_tema(id_crianca, callback);
         }
         
-        let prompt_palavra = self.banco_prompts.montar_prompt(
+        let prompt_palavra = self.montar_prompt_com_nome(
+            id_crianca,
             "gerar_palavra_desafio", 
             &[
                 ("tema", &tema_escolhido),
@@ -250,7 +286,8 @@ impl NucleoAlfabetizacao {
         let _ = self.db.iniciar_missao(id_crianca, &tema_escolhido, &palavra_sorteada, 3);
         
         // Em dispositivos IoT limitados, evitar uso de LLM para templates estritos economiza processamento e evita alucinações
-        let prompt_lancar = self.banco_prompts.montar_prompt(
+        let prompt_lancar = self.montar_prompt_com_nome(
+            id_crianca,
             "lancar_desafio", 
             &[("palavra_desafio", &palavra_sorteada)]
         );
@@ -279,7 +316,8 @@ impl NucleoAlfabetizacao {
             let novos_acertos = acertos + 1;
             if novos_acertos < total {
                 // Sorteia próxima palavra usando o mesmo tema da missão
-                let prompt_palavra = self.banco_prompts.montar_prompt(
+                let prompt_palavra = self.montar_prompt_com_nome(
+                    id_crianca,
                     "gerar_palavra_desafio", 
                     &[
                         ("tema", &tema),
@@ -302,7 +340,8 @@ impl NucleoAlfabetizacao {
 
                 let _ = self.db.avancar_missao(id_crianca, &nova_palavra);
                 
-                let prompt_progresso = self.banco_prompts.montar_prompt(
+                let prompt_progresso = self.montar_prompt_com_nome(
+                    id_crianca,
                     "progresso_missao", 
                     &[
                         ("palavra_acertada", &palavra_esperada),
@@ -321,7 +360,8 @@ impl NucleoAlfabetizacao {
                 format!("{}{}", celeb, sufixo)
             } else {
                 // Missão concluída!
-                let prompt_conclusao = self.banco_prompts.montar_prompt(
+                let prompt_conclusao = self.montar_prompt_com_nome(
+                    id_crianca,
                     "conclusao_missao", &[("palavra_acertada", &palavra_esperada)]
                 );
                 
@@ -361,7 +401,8 @@ impl NucleoAlfabetizacao {
         } else {
             let _ = self.db.salvar_erro(id_crianca, &palavra_esperada);
             
-            let prompt = self.banco_prompts.montar_prompt(
+            let prompt = self.montar_prompt_com_nome(
+                id_crianca,
                 "corrigir_erro", 
                 &[
                     ("palavra_correta", &palavra_esperada),
@@ -382,7 +423,8 @@ impl NucleoAlfabetizacao {
     
     fn fluxo_bate_papo(&self, id_crianca: &str, texto: &str, mut callback: Option<&mut dyn FnMut(&str)>) -> String {
         let contexto = self.db.obter_contexto(id_crianca, 4).unwrap_or_default();
-        let prompt = self.banco_prompts.montar_prompt(
+        let prompt = self.montar_prompt_com_nome(
+            id_crianca,
             "bate_papo_livre", 
             &[
                 ("contexto", &contexto),

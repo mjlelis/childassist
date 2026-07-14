@@ -46,6 +46,14 @@ impl DbSessao {
             [],
         ).map_err(|e| format!("Erro ao criar tabela de estado: {}", e))?;
 
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS perfil_crianca (
+                id_crianca TEXT PRIMARY KEY,
+                nome TEXT NOT NULL
+            )",
+            [],
+        ).map_err(|e| format!("Erro ao criar tabela de perfil: {}", e))?;
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -138,6 +146,16 @@ impl DbSessao {
         Ok(())
     }
 
+    pub fn iniciar_espera_nome(&self, id_crianca: &str) -> Result<(), String> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO estado_jogo (id_crianca, fase, tema, opcoes_tema, palavra_desafio, acertos, total) VALUES (?1, 'ESPERANDO_NOME', NULL, NULL, NULL, 0, 3)
+             ON CONFLICT(id_crianca) DO UPDATE SET fase='ESPERANDO_NOME', tema=NULL, opcoes_tema=NULL, palavra_desafio=NULL, acertos=0, total=3",
+            rusqlite::params![id_crianca],
+        ).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     pub fn iniciar_missao(&self, id_crianca: &str, tema: &str, palavra: &str, total: i32) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         // Não apagamos opcoes_tema, pois ele será usado na próxima fase!
@@ -184,5 +202,28 @@ impl DbSessao {
             rusqlite::params![id_crianca],
         ).map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    pub fn salvar_nome(&self, id_crianca: &str, nome: &str) -> Result<(), String> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO perfil_crianca (id_crianca, nome) VALUES (?1, ?2)
+             ON CONFLICT(id_crianca) DO UPDATE SET nome=excluded.nome",
+            rusqlite::params![id_crianca, nome],
+        ).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn obter_nome(&self, id_crianca: &str) -> Option<String> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT nome FROM perfil_crianca WHERE id_crianca = ?1").ok()?;
+        let mut rows = stmt.query(rusqlite::params![id_crianca]).ok()?;
+        
+        if let Some(row) = rows.next().ok().flatten() {
+            let nome: String = row.get(0).unwrap_or_default();
+            Some(nome)
+        } else {
+            None
+        }
     }
 }
