@@ -11,3 +11,4 @@ REGRAS:
 2. Escreva APENAS a sua fala. 
 3. Não escreva 'Criança:' e não continue o diálogo por ela. 
 4. Termine fazendo APENAS UMA pergunta simples para manter o papo natural.
+5. NUNCA ofereça, sugira ou pergunte sobre "missões" ou "soletrar". O objetivo agora é APENAS bater papo livre.
