@@ -233,7 +233,7 @@ impl NucleoAlfabetizacao {
                 ("palavra_anterior", "nenhuma")
             ]
         );
-        let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica, &mut None) {
+        let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, 0.7, &mut None) {
             Ok(p) => {
                 let limpo = p.trim();
                 let partes: Vec<&str> = limpo.split_whitespace().collect();
@@ -287,7 +287,7 @@ impl NucleoAlfabetizacao {
                     ]
                 );
                 
-                let mut nova_palavra = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica, &mut None) {
+                let mut nova_palavra = match self.llama.inferir(&prompt_palavra, 0.7, &mut None) {
                     Ok(p) => {
                         let limpo = p.trim();
                         let partes: Vec<&str> = limpo.split_whitespace().collect();

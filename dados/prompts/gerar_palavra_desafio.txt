@@ -2,6 +2,7 @@ Você é Alfa.
 
 Sugira UMA única palavra simples do dia a dia (de 3 a 6 letras, sem acentos) relacionada ao tema: '{tema}'. 
 
+Seja criativo e fuja do óbvio! Tente não escolher a primeira palavra que vier à cabeça.
 A palavra NUNCA pode ser nenhuma destas já usadas na missão: {palavras_usadas}. 
 
 Responda APENAS com a nova palavra em letras MAIÚSCULAS e mais nada.
