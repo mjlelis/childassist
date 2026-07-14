@@ -193,21 +193,37 @@ impl NucleoAlfabetizacao {
         msg
     }
 
-    fn fluxo_iniciar_soletracao(&self, id_crianca: &str, texto_digitado: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
+    fn fluxo_iniciar_soletracao(&self, id_crianca: &str, texto_digitado: &str, mut callback: Option<&mut dyn FnMut(&str)>) -> String {
         // Recupera as opções que foram salvas no banco
         let estado = self.db.obter_estado_missao(id_crianca);
-        let mut tema_escolhido = "Geral".to_string();
+        let mut tema_escolhido;
         
         if let Some((_fase, _tema, opcoes_tema, _palavra, _palavras_usadas, _acertos, _total)) = estado {
-            let txt_limpo = texto_digitado.trim();
+            let txt_limpo = texto_digitado.trim().to_lowercase();
             let opcoes: Vec<&str> = opcoes_tema.split(',').collect();
             
-            tema_escolhido = match txt_limpo {
-                "1" => opcoes.get(0).unwrap_or(&"Geral").to_string(),
-                "2" => opcoes.get(1).unwrap_or(&"Geral").to_string(),
-                "3" => opcoes.get(2).unwrap_or(&"Geral").to_string(),
-                _ => txt_limpo.to_string(), // Se a criança digitou o nome inteiro
-            };
+            if txt_limpo == "1" && opcoes.len() >= 1 {
+                tema_escolhido = opcoes[0].trim().to_string();
+            } else if txt_limpo == "2" && opcoes.len() >= 2 {
+                tema_escolhido = opcoes[1].trim().to_string();
+            } else if txt_limpo == "3" && opcoes.len() >= 3 {
+                tema_escolhido = opcoes[2].trim().to_string();
+            } else {
+                if let Some(encontrado) = opcoes.iter().find(|&&t| t.trim().to_lowercase() == txt_limpo) {
+                    tema_escolhido = encontrado.trim().to_string();
+                } else {
+                    let mut txt = String::from("Hum, não achei essa missão. Escolha uma destas:\n");
+                    for (i, t) in opcoes.iter().enumerate() {
+                        txt.push_str(&format!("{} - {}\n", i + 1, t.trim()));
+                    }
+                    if let Some(ref mut cb) = callback {
+                        cb(&txt);
+                    }
+                    return txt;
+                }
+            }
+        } else {
+            return self.fluxo_iniciar_escolha_tema(id_crianca, callback);
         }
         
         let prompt_palavra = self.banco_prompts.montar_prompt(
