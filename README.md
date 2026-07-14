@@ -46,5 +46,4 @@ O sistema é construído como uma **Máquina de Estados Finita**, roteando os ev
 3. **Avaliação:** O núcleo avalia ortograficamente. Se acertar, gera uma celebração única. Se errar, providencia um reforço positivo.
 4. **Bate-Papo Livre:** A qualquer momento, a criança pode fugir do jogo e conversar sobre qualquer coisa. O LLM foi enjaulado para **não** tentar trazer o jogo de volta e deixar a criança livre no Bate Papo, provendo conversas naturais.
 
----
-Feito com 🦀 Rust para moldar o futuro da educação infantil!
+
