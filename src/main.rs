@@ -30,8 +30,13 @@ fn main() {
 
     let id_crianca = "crianca_iot_1".to_string();
 
-    let saudacao = nucleo.iniciar_interacao(id_crianca.clone());
-    println!("🤖 Brinquedo: {}\n", saudacao);
+    print!("🤖 Brinquedo: ");
+    io::stdout().flush().unwrap();
+    let _saudacao = nucleo.iniciar_interacao_stream(&id_crianca, |chunk| {
+        print!("{}", chunk);
+        io::stdout().flush().unwrap();
+    });
+    println!("\n");
 
     loop {
         print!("Criança: ");
@@ -50,7 +55,12 @@ fn main() {
             continue;
         }
 
-        let resposta = nucleo.processar_entrada(id_crianca.clone(), entrada.to_string());
-        println!("🤖 Brinquedo: {}\n", resposta);
+        print!("🤖 Brinquedo: ");
+        io::stdout().flush().unwrap();
+        let _resposta = nucleo.processar_entrada_stream(&id_crianca, entrada, |chunk| {
+            print!("{}", chunk);
+            io::stdout().flush().unwrap();
+        });
+        println!("\n");
     }
 }

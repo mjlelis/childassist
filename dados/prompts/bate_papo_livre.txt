@@ -7,6 +7,7 @@ A criança acaba de dizer: '{fala_crianca}'.
 Escreva a sua resposta de forma amigável e interativa. 
 
 REGRAS:
-1. Escreva APENAS a sua fala. 
-2. Não escreva 'Criança:' e não continue o diálogo por ela. 
-3. Termine fazendo APENAS UMA pergunta simples para manter o papo natural.
+1. Escreva EXCLUSIVAMENTE em Português do Brasil.
+2. Escreva APENAS a sua fala. 
+3. Não escreva 'Criança:' e não continue o diálogo por ela. 
+4. Termine fazendo APENAS UMA pergunta simples para manter o papo natural.

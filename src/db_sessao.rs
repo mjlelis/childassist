@@ -151,14 +151,14 @@ impl DbSessao {
     pub fn avancar_missao(&self, id_crianca: &str, nova_palavra: &str) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE estado_jogo SET palavra_desafio = ?1, acertos = acertos + 1 WHERE id_crianca = ?2",
+            "UPDATE estado_jogo SET palavra_desafio = palavra_desafio || ',' || ?1, acertos = acertos + 1 WHERE id_crianca = ?2",
             rusqlite::params![nova_palavra, id_crianca],
         ).map_err(|e| e.to_string())?;
         Ok(())
     }
 
-    // Retorna: Option<(fase, tema, opcoes_tema, palavra, acertos, total)>
-    pub fn obter_estado_missao(&self, id_crianca: &str) -> Option<(String, String, String, String, i32, i32)> {
+    // Retorna: Option<(fase, tema, opcoes_tema, palavra_atual, palavras_usadas, acertos, total)>
+    pub fn obter_estado_missao(&self, id_crianca: &str) -> Option<(String, String, String, String, String, i32, i32)> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT fase, tema, opcoes_tema, palavra_desafio, acertos, total FROM estado_jogo WHERE id_crianca = ?1").ok()?;
         let mut rows = stmt.query(rusqlite::params![id_crianca]).ok()?;
@@ -167,10 +167,11 @@ impl DbSessao {
             let fase: String = row.get(0).unwrap_or_default();
             let tema: String = row.get(1).unwrap_or_default();
             let opcoes_tema: String = row.get(2).unwrap_or_default();
-            let palavra: String = row.get(3).unwrap_or_default();
+            let palavras_usadas: String = row.get(3).unwrap_or_default();
+            let palavra_atual = palavras_usadas.split(',').last().unwrap_or("").to_string();
             let acertos: i32 = row.get(4).unwrap_or(0);
             let total: i32 = row.get(5).unwrap_or(3);
-            Some((fase, tema, opcoes_tema, palavra, acertos, total))
+            Some((fase, tema, opcoes_tema, palavra_atual, palavras_usadas, acertos, total))
         } else {
             None
         }

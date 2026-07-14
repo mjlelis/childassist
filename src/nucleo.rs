@@ -46,19 +46,40 @@ impl NucleoAlfabetizacao {
     }
 
     pub fn iniciar_interacao(&self, id_crianca: String) -> String {
-        // Limpa qualquer desafio pendente de sessões anteriores que fecharam de forma abrupta
-        let _ = self.db.limpar_desafio(&id_crianca);
-        
-        let prompt = self.banco_prompts.montar_prompt("boas_vindas", &[]);
-        let resposta = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo)
-            .unwrap_or_else(|_| "Oi! Eu sou o seu tutor. O que vamos descobrir hoje?".to_string());
-        
-        let _ = self.db.salvar_mensagem(&id_crianca, "Brinquedo", &resposta);
-        resposta
+        self.iniciar_interacao_internal(&id_crianca, None)
     }
 
     pub fn processar_entrada(&self, id_crianca: String, texto_digitado: String) -> String {
-        let _ = self.db.salvar_mensagem(&id_crianca, "Criança", &texto_digitado);
+        self.processar_entrada_internal(&id_crianca, &texto_digitado, None)
+    }
+}
+
+impl NucleoAlfabetizacao {
+    // Uso local CLI com Streaming
+    pub fn iniciar_interacao_stream<F>(&self, id_crianca: &str, cb: F) -> String 
+    where F: FnMut(&str) {
+        let mut boxed_cb = cb;
+        self.iniciar_interacao_internal(id_crianca, Some(&mut boxed_cb))
+    }
+
+    pub fn processar_entrada_stream<F>(&self, id_crianca: &str, texto_digitado: &str, cb: F) -> String 
+    where F: FnMut(&str) {
+        let mut boxed_cb = cb;
+        self.processar_entrada_internal(id_crianca, texto_digitado, Some(&mut boxed_cb))
+    }
+
+    fn iniciar_interacao_internal(&self, id_crianca: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
+        let _ = self.db.limpar_desafio(id_crianca);
+        let prompt = self.banco_prompts.montar_prompt("boas_vindas", &[]);
+        let resposta = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo, callback)
+            .unwrap_or_else(|_| "Oi! Eu sou o seu tutor. O que vamos descobrir hoje?".to_string());
+        
+        let _ = self.db.salvar_mensagem(id_crianca, "Brinquedo", &resposta);
+        resposta
+    }
+
+    fn processar_entrada_internal(&self, id_crianca: &str, texto_digitado: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
+        let _ = self.db.salvar_mensagem(id_crianca, "Criança", texto_digitado);
 
         // 1. Sanitização Segura
         match self.sanitizador.verificar(&texto_digitado) {
@@ -70,7 +91,7 @@ impl NucleoAlfabetizacao {
         // 2. Classificação de Intenção (Híbrida: Regras Fixas + LLM)
         let estado_missao = self.db.obter_estado_missao(&id_crianca);
         
-        let intencao = if let Some((fase, _tema, opcoes, _palavra, _acertos, _total)) = estado_missao {
+        let intencao = if let Some((fase, _tema, opcoes, _palavra, _palavras_usadas, _acertos, _total)) = estado_missao {
             let txt_limpo = texto_digitado.trim().to_lowercase();
             if txt_limpo == "sair" || txt_limpo == "parar" {
                 let _ = self.db.limpar_desafio(&id_crianca);
@@ -106,15 +127,17 @@ impl NucleoAlfabetizacao {
         };
 
         // 3. Roteamento Seguro com Máquina de Estados
+        // Passamos 'take' no callback pois ele não copia. Passamos mutávelmente referenciando o que já era ref mut
+        let cb = callback;
         let resposta = match intencao.as_str() {
-            "QUER_SOLETRAR" => self.fluxo_iniciar_escolha_tema(&id_crianca),
-            "ESCOLHENDO_TEMA" => self.fluxo_iniciar_soletracao(&id_crianca, &texto_digitado),
-            "TENTATIVA_SOLETRAÇÃO" => self.fluxo_avaliar_soletracao(&id_crianca, &texto_digitado),
-            "BATE_PAPO" => self.fluxo_bate_papo(&id_crianca, &texto_digitado),
-            _ => self.fluxo_bate_papo(&id_crianca, &texto_digitado),
+            "QUER_SOLETRAR" => self.fluxo_iniciar_escolha_tema(id_crianca, cb),
+            "ESCOLHENDO_TEMA" => self.fluxo_iniciar_soletracao(id_crianca, texto_digitado, cb),
+            "TENTATIVA_SOLETRAÇÃO" => self.fluxo_avaliar_soletracao(id_crianca, texto_digitado, cb),
+            "BATE_PAPO" => self.fluxo_bate_papo(id_crianca, texto_digitado, cb),
+            _ => self.fluxo_bate_papo(id_crianca, texto_digitado, cb),
         };
 
-        let _ = self.db.salvar_mensagem(&id_crianca, "Brinquedo", &resposta);
+        let _ = self.db.salvar_mensagem(id_crianca, "Brinquedo", &resposta);
         resposta
     }
 }
@@ -131,7 +154,8 @@ impl NucleoAlfabetizacao {
         );
         let temp = self.banco_prompts.temperaturas.logica; // 0.0
         
-        match self.llama.inferir(&prompt, temp) {
+        // Modelos de raciocínio lógico NUNCA fazem stream
+        match self.llama.inferir(&prompt, temp, None) {
             Ok(resp_json) => {
                 if let Ok(parsed) = serde_json::from_str::<RespostaIntencao>(&resp_json) {
                     parsed.intencao
@@ -143,9 +167,9 @@ impl NucleoAlfabetizacao {
         }
     }
 
-    fn fluxo_iniciar_escolha_tema(&self, id_crianca: &str) -> String {
+    fn fluxo_iniciar_escolha_tema(&self, id_crianca: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
         let prompt = self.banco_prompts.montar_prompt("sugerir_temas", &[]);
-        let json_resposta = self.llama.inferir(&prompt, 0.7)
+        let json_resposta = self.llama.inferir(&prompt, 0.7, None)
             .unwrap_or_else(|_| "[\"Animais\", \"Frutas\", \"Cores\"]".to_string());
             
         // Limpa possíveis blocos de markdown (```json ... ```) e quebras de linha
@@ -159,19 +183,22 @@ impl NucleoAlfabetizacao {
         let t2 = temas_array.get(1).unwrap_or(&"Frutas");
         let t3 = temas_array.get(2).unwrap_or(&"Cores");
         
-        // Inicia a fase salvando as 3 opções no banco (separadas por vírgula)
         let string_temas = format!("{},{},{}", t1, t2, t3);
         let _ = self.db.iniciar_escolha_tema(id_crianca, &string_temas);
         
-        format!("Legal! Escolha um tema pelo número:\n1 - {}\n2 - {}\n3 - {}", t1, t2, t3)
+        let msg = format!("Legal! Escolha um tema pelo número:\n1 - {}\n2 - {}\n3 - {}", t1, t2, t3);
+        if let Some(cb) = callback {
+            cb(&msg);
+        }
+        msg
     }
 
-    fn fluxo_iniciar_soletracao(&self, id_crianca: &str, texto_digitado: &str) -> String {
+    fn fluxo_iniciar_soletracao(&self, id_crianca: &str, texto_digitado: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
         // Recupera as opções que foram salvas no banco
         let estado = self.db.obter_estado_missao(id_crianca);
         let mut tema_escolhido = "Geral".to_string();
         
-        if let Some((_fase, _tema, opcoes_tema, _palavra, _acertos, _total)) = estado {
+        if let Some((_fase, _tema, opcoes_tema, _palavra, _palavras_usadas, _acertos, _total)) = estado {
             let txt_limpo = texto_digitado.trim();
             let opcoes: Vec<&str> = opcoes_tema.split(',').collect();
             
@@ -190,7 +217,7 @@ impl NucleoAlfabetizacao {
                 ("palavra_anterior", "nenhuma")
             ]
         );
-        let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica) {
+        let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica, None) {
             Ok(p) => {
                 let limpo = p.trim();
                 let partes: Vec<&str> = limpo.split_whitespace().collect();
@@ -211,20 +238,20 @@ impl NucleoAlfabetizacao {
             "lancar_desafio", 
             &[("palavra_desafio", &palavra_sorteada)]
         );
-        let msg = self.llama.inferir(&prompt_lancar, self.banco_prompts.temperaturas.bate_papo)
+        let msg = self.llama.inferir(&prompt_lancar, self.banco_prompts.temperaturas.bate_papo, callback)
             .unwrap_or_else(|_| format!("Missão de '{}' iniciada! Vamos soletrar 3 palavras.", tema_escolhido));
             
         format!("{} Como se escreve a palavra '{}'?", msg, palavra_sorteada)
     }
 
-    fn fluxo_avaliar_soletracao(&self, id_crianca: &str, palavra_digitada: &str) -> String {
+    fn fluxo_avaliar_soletracao(&self, id_crianca: &str, palavra_digitada: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
         let estado = self.db.obter_estado_missao(id_crianca);
         
         if estado.is_none() {
-            return self.fluxo_bate_papo(id_crianca, palavra_digitada);
+            return self.fluxo_bate_papo(id_crianca, palavra_digitada, callback);
         }
         
-        let (_fase, tema, opcoes_tema, palavra_esperada, acertos, total) = estado.unwrap();
+        let (_fase, tema, opcoes_tema, palavra_esperada, palavras_usadas, acertos, total) = estado.unwrap();
         
         let acertou = self.corretor.verificar_desafio(palavra_digitada, &palavra_esperada);
         
@@ -236,11 +263,11 @@ impl NucleoAlfabetizacao {
                     "gerar_palavra_desafio", 
                     &[
                         ("tema", &tema),
-                        ("palavra_anterior", &palavra_esperada)
+                        ("palavras_usadas", &palavras_usadas)
                     ]
                 );
                 
-                let mut nova_palavra = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica) {
+                let mut nova_palavra = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica, None) {
                     Ok(p) => {
                         let limpo = p.trim();
                         let partes: Vec<&str> = limpo.split_whitespace().collect();
@@ -264,7 +291,8 @@ impl NucleoAlfabetizacao {
                     ]
                 );
                 
-                let celeb = self.llama.inferir(&prompt_progresso, self.banco_prompts.temperaturas.bate_papo)
+                let cb = callback;
+                let celeb = self.llama.inferir(&prompt_progresso, self.banco_prompts.temperaturas.bate_papo, cb)
                     .unwrap_or_else(|_| format!("Muito bem! Você acertou {} de {}!", novos_acertos, total));
                     
                 format!("{} Próxima palavra: Como se escreve '{}'?", celeb, nova_palavra)
@@ -274,7 +302,8 @@ impl NucleoAlfabetizacao {
                     "conclusao_missao", &[("palavra_acertada", &palavra_esperada)]
                 );
                 
-                let msg_conclusao = self.llama.inferir(&prompt_conclusao, self.banco_prompts.temperaturas.bate_papo)
+                let cb = callback;
+                let msg_conclusao = self.llama.inferir(&prompt_conclusao, self.banco_prompts.temperaturas.bate_papo, cb)
                     .unwrap_or_else(|_| "Uau! Você completou toda a missão! Parabéns!".to_string());
                 
                 // Filtra as opções não escolhidas ainda
@@ -312,14 +341,15 @@ impl NucleoAlfabetizacao {
                 ]
             );
             
-            let correcao = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.correcao)
+            let cb = callback;
+            let correcao = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.correcao, cb)
                 .unwrap_or_else(|_| "Acontece!".to_string());
                 
             format!("{} Vamos tentar de novo? Como se escreve '{}'?", correcao, palavra_esperada)
         }
     }
     
-    fn fluxo_bate_papo(&self, id_crianca: &str, texto: &str) -> String {
+    fn fluxo_bate_papo(&self, id_crianca: &str, texto: &str, callback: Option<&mut dyn FnMut(&str)>) -> String {
         let contexto = self.db.obter_contexto(id_crianca, 4).unwrap_or_default();
         let prompt = self.banco_prompts.montar_prompt(
             "bate_papo_livre", 
@@ -329,8 +359,7 @@ impl NucleoAlfabetizacao {
             ]
         );
         
-        // Conversa solta e criativa (temp 0.7)
-        self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo)
+        self.llama.inferir(&prompt, self.banco_prompts.temperaturas.bate_papo, callback)
             .unwrap_or_else(|_| "Que legal! Me conte mais!".to_string())
     }
 }

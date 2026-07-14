@@ -17,6 +17,6 @@
   "temperaturas": {
     "logica": 0.0,
     "correcao": 0.2,
-    "bate_papo": 0.7
+    "bate_papo": 0.4
   }
 }

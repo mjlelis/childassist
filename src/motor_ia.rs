@@ -1,7 +1,9 @@
 use crate::gerenciador_prompts::ConfigIA;
 
+use std::io::BufRead;
+
 pub trait MotorIA: Send + Sync {
-    fn inferir(&self, prompt: &str, temperatura: f32) -> Result<String, String>;
+    fn inferir(&self, prompt: &str, temperatura: f32, callback: Option<&mut dyn FnMut(&str)>) -> Result<String, String>;
 }
 
 // ==========================================
@@ -40,11 +42,11 @@ impl OllamaEngine {
 }
 
 impl MotorIA for OllamaEngine {
-    fn inferir(&self, prompt: &str, temperatura: f32) -> Result<String, String> {
+    fn inferir(&self, prompt: &str, temperatura: f32, mut callback: Option<&mut dyn FnMut(&str)>) -> Result<String, String> {
         let req_body = OllamaRequest {
             model: &self.config_ia.modelo,
             prompt,
-            stream: false,
+            stream: callback.is_some(),
             options: OllamaOptions { temperature: temperatura },
         };
 
@@ -53,12 +55,27 @@ impl MotorIA for OllamaEngine {
             .send()
             .map_err(|e| format!("Erro requisição Ollama: {}", e))?;
 
-        if res.status().is_success() {
+        if !res.status().is_success() {
+            return Err(format!("Erro Ollama Status: {}", res.status()));
+        }
+
+        if let Some(ref mut cb) = callback {
+            let mut full_response = String::new();
+            let reader = std::io::BufReader::new(res);
+            for line_res in reader.lines() {
+                if let Ok(line) = line_res {
+                    if line.is_empty() { continue; }
+                    if let Ok(chunk) = serde_json::from_str::<OllamaResponse>(&line) {
+                        cb(&chunk.response);
+                        full_response.push_str(&chunk.response);
+                    }
+                }
+            }
+            Ok(full_response.trim().to_string())
+        } else {
             let ollama_res: OllamaResponse = res.json()
                 .map_err(|e| format!("Erro parse Ollama JSON: {}", e))?;
             Ok(ollama_res.response.trim().to_string())
-        } else {
-            Err(format!("Erro Ollama Status: {}", res.status()))
         }
     }
 }
@@ -93,11 +110,11 @@ impl LlamaCppServerEngine {
 }
 
 impl MotorIA for LlamaCppServerEngine {
-    fn inferir(&self, prompt: &str, temperatura: f32) -> Result<String, String> {
+    fn inferir(&self, prompt: &str, temperatura: f32, mut callback: Option<&mut dyn FnMut(&str)>) -> Result<String, String> {
         let req_body = LlamaServerRequest {
             prompt,
             temperature: temperatura,
-            stream: false,
+            stream: callback.is_some(),
         };
 
         let res = self.client.post(&self.config_ia.endpoint)
@@ -105,12 +122,31 @@ impl MotorIA for LlamaCppServerEngine {
             .send()
             .map_err(|e| format!("Erro requisição Llama Server: {}", e))?;
 
-        if res.status().is_success() {
+        if !res.status().is_success() {
+            return Err(format!("Erro Llama Server Status: {}", res.status()));
+        }
+
+        if let Some(ref mut cb) = callback {
+            let mut full_response = String::new();
+            let reader = std::io::BufReader::new(res);
+            for line_res in reader.lines() {
+                if let Ok(line) = line_res {
+                    let l = line.trim();
+                    if l.starts_with("data: ") {
+                        let json_str = &l[6..];
+                        if json_str == "[DONE]" { break; }
+                        if let Ok(chunk) = serde_json::from_str::<LlamaServerResponse>(json_str) {
+                            cb(&chunk.content);
+                            full_response.push_str(&chunk.content);
+                        }
+                    }
+                }
+            }
+            Ok(full_response.trim().to_string())
+        } else {
             let llama_res: LlamaServerResponse = res.json()
                 .map_err(|e| format!("Erro parse Llama Server JSON: {}", e))?;
             Ok(llama_res.content.trim().to_string())
-        } else {
-            Err(format!("Erro Llama Server Status: {}", res.status()))
         }
     }
 }

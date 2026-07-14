@@ -4,4 +4,6 @@ A criança acaba de acertar a última palavra '{palavra_acertada}' e CONCLUIU a 
 
 Faça uma festa textual muito alegre e curta parabenizando a vitória da criança! 
 
-Pergunte se ela quer bater papo ou fazer outra missão de soletração.
+REGRAS ESTritas:
+1. Escreva EXCLUSIVAMENTE em Português do Brasil.
+2. Não faça perguntas no final. Apenas parabenize!
