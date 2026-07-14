@@ -190,7 +190,7 @@ impl NucleoAlfabetizacao {
                 ("palavra_anterior", "nenhuma")
             ]
         );
-        let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, 0.9) {
+        let mut palavra_sorteada = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica) {
             Ok(p) => {
                 let limpo = p.trim();
                 let partes: Vec<&str> = limpo.split_whitespace().collect();
@@ -207,7 +207,14 @@ impl NucleoAlfabetizacao {
         let _ = self.db.iniciar_missao(id_crianca, &tema_escolhido, &palavra_sorteada, 3);
         
         // Em dispositivos IoT limitados, evitar uso de LLM para templates estritos economiza processamento e evita alucinações
-        format!("Missão de '{}' iniciada! Vamos soletrar 3 palavras. Como se escreve a palavra '{}'?", tema_escolhido, palavra_sorteada)
+        let prompt_lancar = self.banco_prompts.montar_prompt(
+            "lancar_desafio", 
+            &[("palavra_desafio", &palavra_sorteada)]
+        );
+        let msg = self.llama.inferir(&prompt_lancar, self.banco_prompts.temperaturas.bate_papo)
+            .unwrap_or_else(|_| format!("Missão de '{}' iniciada! Vamos soletrar 3 palavras.", tema_escolhido));
+            
+        format!("{} Como se escreve a palavra '{}'?", msg, palavra_sorteada)
     }
 
     fn fluxo_avaliar_soletracao(&self, id_crianca: &str, palavra_digitada: &str) -> String {
@@ -233,7 +240,7 @@ impl NucleoAlfabetizacao {
                     ]
                 );
                 
-                let mut nova_palavra = match self.llama.inferir(&prompt_palavra, 0.9) {
+                let mut nova_palavra = match self.llama.inferir(&prompt_palavra, self.banco_prompts.temperaturas.logica) {
                     Ok(p) => {
                         let limpo = p.trim();
                         let partes: Vec<&str> = limpo.split_whitespace().collect();
@@ -254,12 +261,13 @@ impl NucleoAlfabetizacao {
                         ("palavra_acertada", &palavra_esperada),
                         ("acertos", &novos_acertos.to_string()),
                         ("total", &total.to_string()),
-                        ("nova_palavra", &nova_palavra)
                     ]
                 );
                 
-                self.llama.inferir(&prompt_progresso, self.banco_prompts.temperaturas.bate_papo)
-                    .unwrap_or_else(|_| format!("Muito bem! Você acertou {} de {}! Agora escreva '{}'.", novos_acertos, total, nova_palavra))
+                let celeb = self.llama.inferir(&prompt_progresso, self.banco_prompts.temperaturas.bate_papo)
+                    .unwrap_or_else(|_| format!("Muito bem! Você acertou {} de {}!", novos_acertos, total));
+                    
+                format!("{} Próxima palavra: Como se escreve '{}'?", celeb, nova_palavra)
             } else {
                 // Missão concluída!
                 let prompt_conclusao = self.banco_prompts.montar_prompt(
@@ -304,8 +312,10 @@ impl NucleoAlfabetizacao {
                 ]
             );
             
-            self.llama.inferir(&prompt, self.banco_prompts.temperaturas.correcao)
-                .unwrap_or_else(|_| "Acontece! Vamos tentar de novo?".to_string())
+            let correcao = self.llama.inferir(&prompt, self.banco_prompts.temperaturas.correcao)
+                .unwrap_or_else(|_| "Acontece!".to_string());
+                
+            format!("{} Vamos tentar de novo? Como se escreve '{}'?", correcao, palavra_esperada)
         }
     }
     

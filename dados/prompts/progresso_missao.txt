@@ -3,10 +3,8 @@
 A criança acaba de acertar a palavra '{palavra_acertada}'! 
 Ela completou {acertos} de {total} desafios da missão. 
 
-A próxima palavra sorteada é '{nova_palavra}'. 
-
-Crie uma fala muito curta em português do Brasil celebrando o acerto e lançando o próximo desafio. 
+Crie uma fala muito curta em português do Brasil celebrando o acerto.
 
 REGRAS ESTritas:
-1. NUNCA USE INGLÊS (como 'next word'). 
-2. Use EXATAMENTE a estrutura final: 'Como se escreve {nova_palavra}?'.
+1. NUNCA USE INGLÊS. 
+2. NÃO FAÇA PERGUNTAS NO FINAL, APENAS CELEBRE.
