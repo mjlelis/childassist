@@ -32,10 +32,18 @@ fn main() {
 
     print!("🤖 Brinquedo: ");
     io::stdout().flush().unwrap();
-    let _saudacao = nucleo.iniciar_interacao_stream(&id_crianca, |chunk| {
+    let mut streamed_saudacao = String::new();
+    let saudacao = nucleo.iniciar_interacao_stream(&id_crianca, |chunk| {
+        streamed_saudacao.push_str(chunk);
         print!("{}", chunk);
         io::stdout().flush().unwrap();
     });
+    
+    let sobra_saudacao = saudacao.strip_prefix(&streamed_saudacao).unwrap_or(&saudacao);
+    if !sobra_saudacao.is_empty() {
+        print!("{}", sobra_saudacao);
+        io::stdout().flush().unwrap();
+    }
     println!("\n");
 
     loop {
@@ -57,10 +65,19 @@ fn main() {
 
         print!("🤖 Brinquedo: ");
         io::stdout().flush().unwrap();
-        let _resposta = nucleo.processar_entrada_stream(&id_crianca, entrada, |chunk| {
+        
+        let mut streamed_resposta = String::new();
+        let resposta = nucleo.processar_entrada_stream(&id_crianca, entrada, |chunk| {
+            streamed_resposta.push_str(chunk);
             print!("{}", chunk);
             io::stdout().flush().unwrap();
         });
+        
+        let sobra_resposta = resposta.strip_prefix(&streamed_resposta).unwrap_or(&resposta);
+        if !sobra_resposta.is_empty() {
+            print!("{}", sobra_resposta);
+            io::stdout().flush().unwrap();
+        }
         println!("\n");
     }
 }
